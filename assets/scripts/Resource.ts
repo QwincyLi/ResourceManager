@@ -3,56 +3,18 @@ const { ccclass, property, menu } = cc._decorator;
 /**
  * 资源管理模块
  * 
- * @link [asset bundle](https://forum.cocos.org/t/creator-asset-bundle/99886)
- * @link [资源管理](https://forum.cocos.org/t/creator/99454)
- * @link [加载与预加载](https://forum.cocos.org/t/topic/99843)
+ * TODO : 遍历所有组件及其属性的方式优化
  */
 @ccclass
 export default class Resource extends cc.Component {
 
+    @property({ tooltip: "游戏运行后不可再修改" })
     public autoRef: boolean = true
 
-    async onLoad() {
-
-        if (CC_PREVIEW) {
-            this.schedule(() => {
-                cc.log(cc.assetManager.assets)
-            }, 3)
-        }
-
-        //直接预制引用计数-1 资源被移除
-        this.scheduleOnce(() => {
-            cc.assetManager.loadBundle("prefabs", (err: Error, bundle: cc.AssetManager.Bundle) => {
-                if (err) {
-                    cc.warn(err)
-                    return
-                }
-                cc.log(bundle)
-                bundle.load("test1", cc.Prefab, (err, prefab: cc.Prefab) => {
-                    if (err) {
-                        cc.warn(err)
-                        return
-                    }
-                    let node = this.Instantiate(prefab)
-                    this.node.addChild(node)
-
-
-                    this.scheduleOnce(() => {
-                        //this.decRef(prefab)
-                        this.scheduleOnce(() => {
-                            this.Destroy(node)
-                        }, 10)
-                    }, 10)
-                })
-            })
-        }, 0)
-    }
-
-    public Instantiate(prefabOrNode: cc.Prefab | cc.Node): cc.Node {
+    public instantiateNode(prefabOrNode: cc.Prefab | cc.Node): cc.Node {
         if (this.autoRef && prefabOrNode instanceof cc.Prefab) {
-            //预制添加引用
+            //预制资源添加引用(如果单次创建 实例化后不需要保留预制资源的引用的话 则需要调用decRef 将预制手动释放掉)
             this.addRef(prefabOrNode)
-            this.autoRefNodeAsset(prefabOrNode.data)
         }
         let node = cc.instantiate(prefabOrNode as cc.Node)
 
@@ -62,14 +24,43 @@ export default class Resource extends cc.Component {
                 //hack 标记资源的预制来源
                 //@ts-expect-error
                 node._uuid = prefabOrNode._uuid
-                // delta = 2 //预制实例化多一次引用 保证其初始依赖的资源在被替换后不会被移除
             }
-            this.autoRefNodeAsset(node)
+            this._autoRefNodeAsset(node)
         }
         return node
     }
 
-    public Destroy(node: cc.Node) {
+    /**
+     * 实例化多个对象(自动引用计数时会遍历所有组件,为了减少消耗,需要实例化多个时建议使用此接口)
+     * @param prefabOrNode 
+     * @param count 
+     */s
+    public instantiateNodeMultip(prefabOrNode: cc.Prefab | cc.Node, count: number = 1): cc.Node[] {
+        let isPrefab = prefabOrNode instanceof cc.Prefab
+        if (this.autoRef && isPrefab) {
+            //预制添加引用
+            this.addRef(prefabOrNode as cc.Prefab, count)
+        }
+        let nodeList = []
+        for (let i = 0; i < nodeList.length; i++) {
+            let node = cc.instantiate(prefabOrNode as cc.Node)
+            nodeList.push(node)
+        }
+
+        if (this.autoRef) {
+            // @ts-expect-error
+            if (prefabOrNode._uuid) {
+                //hack 标记资源的预制来源
+                //@ts-expect-error
+                node._uuid = prefabOrNode._uuid
+            }
+            this._autoRefNodeAsset(isPrefab ? (prefabOrNode as cc.Prefab).data : (prefabOrNode as cc.Node), count)
+        }
+        return nodeList
+    }
+
+
+    public destroyNode(node: cc.Node) {
         if (node) {
             if (this.autoRef) {
                 //hack 根据标记的预}制来源 减少预制的引用
@@ -82,83 +73,93 @@ export default class Resource extends cc.Component {
                         this.decRef(prefab)
                     }
                 }
-                this.autoRefNodeAsset(node, -1)
+                this._autoRefNodeAsset(node, -1)
             }
             node.destroy()
         }
     }
 
+    public destroyAllChildrenNode(node: cc.Node) {
+        if (node) {
+            let count = node.childrenCount
+            for (let i = 0; i < count; i++) {
+                this.destroyNode(node.children[i])
+            }
+        }
+    }
+
     public addRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef) {
-            this.autoRefAsset(asset, delta)
+            this._autoRefAsset(asset, delta)
+
             //子资源引用计数管理
             if (asset instanceof cc.SpriteAtlas) {
                 let sprites = asset.getSpriteFrames()
                 for (let i = 0; i < sprites.length; i++) {
-                    this.autoRefAsset(sprites[i], delta)
+                    this._autoRefAsset(sprites[i], delta)
                 }
+            } else if (asset instanceof cc.Prefab) {
+                this._autoRefNodeAsset(asset.data, 1)
             }
+            // if (CC_PREVIEW) {
+            //     cc.log(new Date().toLocaleTimeString() + " : " + asset.name + " 引用计数+1, 剩余 " + asset.refCount)
+            // }
         }
     }
 
     public decRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef && asset) {
-            if (asset.refCount > 0) {
-                this.autoRefAsset(asset, -1 * delta)
-                //子资源引用计数管理
-                if (asset instanceof cc.SpriteAtlas) {
-                    let sprites = asset.getSpriteFrames()
-                    for (let i = 0; i < sprites.length; i++) {
-                        this.autoRefAsset(sprites[i], -1 * delta)
-                    }
-                } else if (asset instanceof cc.Prefab) {
-                    this.autoRefNodeAsset(asset.data, -1 * delta)
+            this._autoRefAsset(asset, -1 * delta)
+            //子资源引用计数管理
+            if (asset instanceof cc.SpriteAtlas) {
+                let sprites = asset.getSpriteFrames()
+                for (let i = 0; i < sprites.length; i++) {
+                    this._autoRefAsset(sprites[i], -1 * delta)
                 }
+            } else if (asset instanceof cc.Prefab) {
+                this._autoRefNodeAsset(asset.data, -1 * delta)
             }
+            // if (CC_PREVIEW) {
+            //     cc.log(new Date().toLocaleTimeString() + " : " + asset.name + " 引用计数-1, 剩余 " + asset.refCount)
+            // }
+
         }
     }
 
-    public autoRefAsset(asset: cc.Asset, delta) {
+    private _autoRefAsset(asset: cc.Asset, delta) {
         if (delta > 0) {
             for (let i = 0; i < delta; i++) {
                 asset.addRef()
-                if (CC_PREVIEW) {
-                    cc.log(new Date().toLocaleTimeString() + " : " + asset.name + " 引用计数+1, 剩余 " + asset.refCount)
-                }
             }
         } else if (delta < 0) {
             for (let i = delta; i < 0; i++) {
-                if (asset.refCount <= 0) break
                 asset.decRef()
-                if (CC_PREVIEW) {
-                    cc.log(new Date().toLocaleTimeString() + " : " + asset.name + " 引用计数-1, 剩余 " + asset.refCount)
-                }
             }
         }
     }
 
-    autoRefNodeAsset(node: cc.Node, delta: number = 1) {
+    private _autoRefNodeAsset(node: cc.Node, delta: number = 1) {
         let componentList = node.getComponentsInChildren(cc.Component)
         for (let i = 0; i < componentList.length; i++) {
             let component = componentList[i]
-            this.autoRefComponentAsset(component, delta)
+            this._autoRefComponentAsset(component, delta)
         }
     }
 
-    autoRefComponentAsset(component: cc.Component, delta: number = 1) {
+    private _autoRefComponentAsset(component: cc.Component, delta: number = 1) {
         for (let property in component) {
             let value = component[property]
-            if (this.checkProperty(property, value, component, delta)) {
-                continue
-            } else if (Array.isArray(value)) {
-                this.checkArray(value, delta)
+            if (Array.isArray(value)) {
+                this._checkArray(value, delta)
             } else if (value instanceof Map) {
-                this.checkMap(value, delta)
+                this._checkMap(value, delta)
+            } else if (this._checkProperty(property, value, component, delta)) {
+                continue
             }
         }
     }
 
-    checkProperty(key: string, value: any, component, delta: number) {
+    private _checkProperty(key: string, value: any, component, delta: number) {
         if (value instanceof cc.Asset) {
             if (value instanceof cc.Texture2D) return false
             //跳过setter getter
@@ -166,71 +167,179 @@ export default class Resource extends cc.Component {
             if (!descriptor) {
                 return false
             }
+
             let asset: cc.Asset = value
-            this.autoRefAsset(asset, delta)
+            this._autoRefAsset(asset, delta)
             return true
         }
         return false
     }
 
-    checkArray(arrayList: any[], delta: number) {
+    private _checkArray(arrayList: any[], delta: number) {
         for (let i = 0; i < arrayList.length; i++) {
             let data = arrayList[i]
             if (data instanceof cc.Asset) {
                 if (data instanceof cc.Texture2D) continue
                 let asset: cc.Asset = data
-                this.autoRefAsset(asset, delta)
+                this._autoRefAsset(asset, delta)
             }
         }
     }
 
-    checkMap(map: Map<any, any>, delta: number) {
+    private _checkMap(map: Map<any, any>, delta: number) {
         map.forEach((value, key) => {
             if (value instanceof cc.Asset && !(value instanceof cc.Texture2D)) {
-                this.autoRefAsset(value, delta)
+                this._autoRefAsset(value, delta)
             }
             if (key instanceof cc.Asset && !(key instanceof cc.Texture2D)) {
-                this.autoRefAsset(key, delta)
+                this._autoRefAsset(key, delta)
             }
         })
     }
 
     /**
-     * 加载Bundle资源
+     * 加载bundle 若已缓存则直接同步执行回调
      * @param bundleName 
      * @param onLoad 
      */
-    loadBundleAsync(bundleName: string, onLoaded: (err, bundle: cc.AssetManager.Bundle) => void) {
-        cc.assetManager.loadBundle(bundleName, onLoaded)
-    }
-
-    loadPrefabAsync(bundleName, prefabPath: string, onLoaded: (err, prefab: cc.Prefab) => void) {
-        this.loadBundleAsync(bundleName, (err, bundle) => {
+    public loadBundle(bundleName: string, onLoad) {
+        let cacheBundle = cc.assetManager.bundles.get(bundleName)
+        if (cacheBundle) {
+            onLoad(null, cacheBundle)
+            return
+        }
+        cc.log("bundle加载: " + bundleName)
+        cc.assetManager.loadBundle(bundleName, (err, bundle: cc.AssetManager.Bundle) => {
             if (err) {
-                onLoaded(err, null)
+                cc.warn(err)
+                onLoad(err, null)
                 return
             }
-            bundle.load(prefabPath, cc.Prefab, (err, prefab: cc.Prefab) => {
-                if (err) {
-                    onLoaded(err, null)
-                    return
+            let deps = bundle.deps
+            if (deps) {
+                for (let i = 0; i < deps.length; i++) {
+                    let depBundleName = deps[i]
+                    if (cc.assetManager.bundles.get(depBundleName)) {
+
+                    } else {
+                        cc.log("bundle依赖加载: " + bundleName + " - " + depBundleName)
+                        cc.assetManager.loadBundle(depBundleName, (depErr, depBundle) => {
+                            if (depErr) {
+                                cc.warn(depErr)
+                                return
+                            }
+                        })
+                    }
                 }
-                onLoaded(null, prefab)
-            })
+            }
+            onLoad(null, bundle)
         })
     }
 
-    async loadBundleSync(bundleName) {
-        return new Promise((resolve, reject) => {
-            cc.assetManager.loadBundle(bundleName, (err, bundle) => {
-                if (err) {
-                    resolve(null)
-                } else {
-                    resolve(bundle)
-                }
-            })
+    public setSpriteFrame(image: cc.Sprite | cc.Mask, newSpriteFrame: cc.SpriteFrame) {
+        if (!image) return
+        let oldSpriteFrame = image.spriteFrame
+        if (oldSpriteFrame) {
+            this.decRef(oldSpriteFrame)
+        }
+        if (newSpriteFrame) {
+            this.addRef(newSpriteFrame)
+        }
+
+        try {
+            image.spriteFrame = newSpriteFrame
+        } catch (e) {
+            cc.warn(e)
+        }
+    }
+
+    public setFont(label: cc.Label | cc.RichText, newFont: cc.Font) {
+        if (!label) return
+        let oldFont = label.font
+
+        if (this.autoRef) {
+            if (oldFont)
+                this.decRef(oldFont)
+            if (newFont)
+                this.addRef(newFont)
+        }
+
+        label.font = newFont
+    }
+
+    public setMaterial(render: cc.RenderComponent, index: number, newMaterial: cc.Material) {
+        //边界条件检查
+        if (index < 0) return
+        if (index >= render.getMaterials().length) return
+
+        let oldMaterial = render.getMaterial(index)
+        if (oldMaterial)
+            this.decRef(oldMaterial)
+        if (newMaterial)
+            this.addRef(newMaterial)
+        render.setMaterial(index, newMaterial)
+    }
+
+    public loadSpriteFrame(bundleName: string, imageName: string, onLoad: (err?: string, spriteFrame?: cc.SpriteFrame) => void) {
+        this.loadAsset(bundleName, imageName, cc.SpriteFrame, (err, spriteFrame: cc.SpriteFrame) => {
+            onLoad(err, spriteFrame)
         })
     }
 
+    public loadPrefab(bundleName: string, prefabName: string, onLoad: (err?: string, prefab?: cc.Prefab) => void) {
+        this.loadAsset(bundleName, prefabName, cc.Prefab, (err, prefab: cc.Prefab) => {
+            onLoad(err, prefab)
+        })
+    }
 
+    public loadAudioClip(bundleName: string, clipName: string, callback: (err: string, clip: cc.AudioClip) => void) {
+        this.loadAsset(bundleName, clipName, cc.AudioClip, (err, audioClip: cc.AudioClip) => {
+            callback(err, audioClip)
+        })
+    }
+
+    public loadAnimationClip(bundleName: string, clipName: string, callback: (err: string, clip: cc.AnimationClip) => void) {
+        this.loadAsset(bundleName, clipName, cc.AnimationClip, (err, audioClip: cc.AnimationClip) => {
+            callback(err, audioClip)
+        })
+    }
+
+    /**
+     * 从指定资源包中加载指定资源
+     *
+     * @param bundleName bundle包名
+     * @param assetName 资源名称
+     * @param type 资源类型
+     * @param callback 加载完成 回调函数
+     */
+    public loadAsset(bundleName: string, assetName: string, type: typeof cc.Asset, callback: (err?: string, asset?: cc.Asset) => void) {
+        this.loadBundle(bundleName, (err: string, bundle: cc.AssetManager.Bundle) => {
+            if (!err) {
+                //hack 将路径转换为uuid (参考引擎资源加载管线中 urlTransformer 实现)
+                //@ts-expect-error
+                let config = bundle._config;
+                let info = config.getInfoWithPath(assetName, type);
+                if (info) {
+                    let uuid = info.uuid //cc.assetManager.assets里面存储的key
+                    let cachedAsset = cc.assetManager.assets.get(uuid)
+                    if (cachedAsset) {
+                        callback(null, cachedAsset)
+                        return
+                    }
+                }
+                bundle.load(assetName, type, (err, asset: cc.Asset) => {
+                    if (err) {
+                        cc.warn(err)
+                        //@ts-expect-error
+                        callback(err)
+                    } else {
+                        callback(null, asset)
+                    }
+                });
+            } else {
+                cc.warn(err)
+                callback(err)
+            }
+        })
+    }
 }
