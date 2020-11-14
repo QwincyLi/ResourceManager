@@ -1,4 +1,3 @@
-import Resource from "./Resource";
 import Test from "./Test";
 
 const { ccclass, property } = cc._decorator;
@@ -41,7 +40,6 @@ export default class TestAnimation extends Test {
             let animation = node.getComponent(cc.Animation)
             animation.addClip(this.animationClip)
             animation.play("up")
-
         }
     }
 }

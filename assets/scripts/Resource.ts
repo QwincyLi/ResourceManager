@@ -11,6 +11,12 @@ export default class Resource extends cc.Component {
     @property({ tooltip: "游戏运行后不可再修改" })
     public autoRef: boolean = true
 
+    public onLoad() {
+        // cc.assetManager.assets.forEach((asset: cc.Asset, url) => {
+        //     this.addRef(asset)
+        // })
+    }
+
     public instantiateNode(prefabOrNode: cc.Prefab | cc.Node): cc.Node {
         if (this.autoRef && prefabOrNode instanceof cc.Prefab) {
             //预制资源添加引用(如果单次创建 实例化后不需要保留预制资源的引用的话 则需要调用decRef 将预制手动释放掉)
@@ -91,7 +97,6 @@ export default class Resource extends cc.Component {
     public addRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef) {
             this._autoRefAsset(asset, delta)
-
             //子资源引用计数管理
             if (asset instanceof cc.SpriteAtlas) {
                 let sprites = asset.getSpriteFrames()
@@ -109,7 +114,6 @@ export default class Resource extends cc.Component {
 
     public decRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef && asset) {
-            this._autoRefAsset(asset, -1 * delta)
             //子资源引用计数管理
             if (asset instanceof cc.SpriteAtlas) {
                 let sprites = asset.getSpriteFrames()
@@ -119,6 +123,13 @@ export default class Resource extends cc.Component {
             } else if (asset instanceof cc.Prefab) {
                 this._autoRefNodeAsset(asset.data, -1 * delta)
             }
+            // else if (asset instanceof cc.Material) {
+            //     let effectAsset = asset.effectAsset
+            //     if (effectAsset) {
+            //         this._autoRefAsset(effectAsset, -1 * delta)
+            //     }
+            // }
+            this._autoRefAsset(asset, -1 * delta)
             // if (CC_PREVIEW) {
             //     cc.log(new Date().toLocaleTimeString() + " : " + asset.name + " 引用计数-1, 剩余 " + asset.refCount)
             // }
@@ -127,7 +138,13 @@ export default class Resource extends cc.Component {
     }
 
     private _autoRefAsset(asset: cc.Asset, delta) {
+        // if (asset instanceof cc.Material) {
+        //     if (/ (Instance)$/.test(asset.name))
+        //         return
+        // }
         if (delta > 0) {
+            if (asset.refCount <= 0 && CC_PREVIEW)
+                cc.log(asset.name + " 将被自动引用管理")
             for (let i = 0; i < delta; i++) {
                 asset.addRef()
             }
@@ -135,6 +152,8 @@ export default class Resource extends cc.Component {
             for (let i = delta; i < 0; i++) {
                 asset.decRef()
             }
+            if (asset.refCount <= 0 && CC_PREVIEW)
+                cc.log(asset.name + " 将被释放")
         }
     }
 
@@ -239,6 +258,7 @@ export default class Resource extends cc.Component {
     public setSpriteFrame(image: cc.Sprite | cc.Mask, newSpriteFrame: cc.SpriteFrame) {
         if (!image) return
         let oldSpriteFrame = image.spriteFrame
+        if (oldSpriteFrame == newSpriteFrame) return
         if (oldSpriteFrame) {
             this.decRef(oldSpriteFrame)
         }
@@ -256,7 +276,7 @@ export default class Resource extends cc.Component {
     public setFont(label: cc.Label | cc.RichText, newFont: cc.Font) {
         if (!label) return
         let oldFont = label.font
-
+        if (oldFont == newFont) return
         if (this.autoRef) {
             if (oldFont)
                 this.decRef(oldFont)
@@ -271,8 +291,8 @@ export default class Resource extends cc.Component {
         //边界条件检查
         if (index < 0) return
         if (index >= render.getMaterials().length) return
-
         let oldMaterial = render.getMaterial(index)
+        if (oldMaterial == newMaterial) return
         if (oldMaterial)
             this.decRef(oldMaterial)
         if (newMaterial)
@@ -280,28 +300,24 @@ export default class Resource extends cc.Component {
         render.setMaterial(index, newMaterial)
     }
 
-    public loadSpriteFrame(bundleName: string, imageName: string, onLoad: (err?: string, spriteFrame?: cc.SpriteFrame) => void) {
-        this.loadAsset(bundleName, imageName, cc.SpriteFrame, (err, spriteFrame: cc.SpriteFrame) => {
-            onLoad(err, spriteFrame)
-        })
+    public loadSpriteFrame(bundleName: string, imageName: string, callback: (err?: string, spriteFrame?: cc.SpriteFrame) => void) {
+        this.loadAsset(bundleName, imageName, cc.SpriteFrame, callback)
     }
 
-    public loadPrefab(bundleName: string, prefabName: string, onLoad: (err?: string, prefab?: cc.Prefab) => void) {
-        this.loadAsset(bundleName, prefabName, cc.Prefab, (err, prefab: cc.Prefab) => {
-            onLoad(err, prefab)
-        })
+    public loadMaterial(bundleName: string, materialPath: string, callback?: (err?: string, material?: cc.Material) => void) {
+        this.loadAsset(bundleName, materialPath, cc.Material, callback)
     }
 
-    public loadAudioClip(bundleName: string, clipName: string, callback: (err: string, clip: cc.AudioClip) => void) {
-        this.loadAsset(bundleName, clipName, cc.AudioClip, (err, audioClip: cc.AudioClip) => {
-            callback(err, audioClip)
-        })
+    public loadPrefab(bundleName: string, prefabPath: string, callback: (err?: string, prefab?: cc.Prefab) => void) {
+        this.loadAsset(bundleName, prefabPath, cc.Prefab, callback)
     }
 
-    public loadAnimationClip(bundleName: string, clipName: string, callback: (err: string, clip: cc.AnimationClip) => void) {
-        this.loadAsset(bundleName, clipName, cc.AnimationClip, (err, audioClip: cc.AnimationClip) => {
-            callback(err, audioClip)
-        })
+    public loadAudioClip(bundleName: string, audioClipPath: string, callback: (err: string, clip: cc.AudioClip) => void) {
+        this.loadAsset(bundleName, audioClipPath, cc.AudioClip, callback)
+    }
+
+    public loadAnimationClip(bundleName: string, clipPath: string, callback: (err: string, clip: cc.AnimationClip) => void) {
+        this.loadAsset(bundleName, clipPath, cc.AnimationClip, callback)
     }
 
     /**
@@ -312,7 +328,7 @@ export default class Resource extends cc.Component {
      * @param type 资源类型
      * @param callback 加载完成 回调函数
      */
-    public loadAsset(bundleName: string, assetName: string, type: typeof cc.Asset, callback: (err?: string, asset?: cc.Asset) => void) {
+    public loadAsset(bundleName: string, assetName: string, type: typeof cc.Asset, callback?: (err?: string, asset?: cc.Asset) => void) {
         this.loadBundle(bundleName, (err: string, bundle: cc.AssetManager.Bundle) => {
             if (!err) {
                 //hack 将路径转换为uuid (参考引擎资源加载管线中 urlTransformer 实现)
@@ -323,7 +339,7 @@ export default class Resource extends cc.Component {
                     let uuid = info.uuid //cc.assetManager.assets里面存储的key
                     let cachedAsset = cc.assetManager.assets.get(uuid)
                     if (cachedAsset) {
-                        callback(null, cachedAsset)
+                        callback && callback(null, cachedAsset)
                         return
                     }
                 }
@@ -331,14 +347,14 @@ export default class Resource extends cc.Component {
                     if (err) {
                         cc.warn(err)
                         //@ts-expect-error
-                        callback(err)
+                        callback && callback(err)
                     } else {
-                        callback(null, asset)
+                        callback && callback(null, asset)
                     }
                 });
             } else {
                 cc.warn(err)
-                callback(err)
+                callback && callback(err)
             }
         })
     }
