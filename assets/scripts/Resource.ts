@@ -138,10 +138,15 @@ export default class Resource extends cc.Component {
     }
 
     private _autoRefAsset(asset: cc.Asset, delta) {
-        // if (asset instanceof cc.Material) {
-        //     if (/ (Instance)$/.test(asset.name))
-        //         return
-        // }
+        //内置材质 跳过(内置材质引用计数减为0其实也没释放掉)
+        if (asset instanceof cc.Material) {
+            //@ts-expect-error
+            let material = asset instanceof cc.MaterialVariant ? asset.material : asset
+            if (cc.assetManager.builtins.getBuiltin("material", material.name)) {
+                return
+            }
+        }
+
         if (delta > 0) {
             if (asset.refCount <= 0 && CC_PREVIEW)
                 cc.log(asset.name + " 将被自动引用管理")
@@ -181,6 +186,7 @@ export default class Resource extends cc.Component {
     private _checkProperty(key: string, value: any, component, delta: number) {
         if (value instanceof cc.Asset) {
             if (value instanceof cc.Texture2D) return false
+            //if (value instanceof cc.Material && !(cc instanceof cc.MaterialVariant)) return false
             //跳过setter getter
             let descriptor = Object.getOwnPropertyDescriptor(component, key)
             if (!descriptor) {
