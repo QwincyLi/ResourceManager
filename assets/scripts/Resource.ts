@@ -3,6 +3,9 @@ const { ccclass, property, menu } = cc._decorator;
 /**
  * 资源管理模块
  * 
+ * 1.预加载: 直接使用引擎接口即可
+ * 2.资源常驻: 在加载完成得回调中调用本模块的addRef接口(非引擎自带的资源addRef)
+ * 3.测试demo: https://github.com/QinSheng-Li/ResourceDemo
  * TODO : 遍历所有组件及其属性的方式优化
  */
 @ccclass
@@ -17,6 +20,10 @@ export default class Resource extends cc.Component {
         // })
     }
 
+    /**
+     * 实例化一个预制或者节点,为了保证资源被正确引用计数，请使用此接口代替cc.instantiate
+     * @param prefabOrNode 
+     */
     public instantiateNode(prefabOrNode: cc.Prefab | cc.Node): cc.Node {
         if (!prefabOrNode) return null
         if (this.autoRef && prefabOrNode instanceof cc.Prefab) {
@@ -41,7 +48,7 @@ export default class Resource extends cc.Component {
      * 实例化多个对象(自动引用计数时会遍历所有组件,为了减少消耗,需要实例化多个时建议使用此接口)
      * @param prefabOrNode 
      * @param count 
-     */s
+     */
     public instantiateNodeMultip(prefabOrNode: cc.Prefab | cc.Node, count: number = 1): cc.Node[] {
         if (!prefabOrNode) return null
         let isPrefab = prefabOrNode instanceof cc.Prefab
@@ -67,7 +74,10 @@ export default class Resource extends cc.Component {
         return nodeList
     }
 
-
+    /**
+     * 销毁一个节点,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的addRef方法
+     * @param node 
+     */
     public destroyNode(node: cc.Node) {
         if (node) {
             if (this.autoRef) {
@@ -96,6 +106,11 @@ export default class Resource extends cc.Component {
         }
     }
 
+    /**
+     * 给资源增加引用计数,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的addRef方法
+     * @param asset 
+     * @param delta 增加的引用计数量,默认为1
+     */
     public addRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef) {
             this._autoRefAsset(asset, delta)
@@ -114,6 +129,11 @@ export default class Resource extends cc.Component {
         }
     }
 
+    /**
+     * 给资源减少引用计数,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的addRef方法
+     * @param asset 
+     * @param delta 减少的引用计数量,默认为1
+     */
     public decRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef && asset) {
             //子资源引用计数管理
@@ -167,6 +187,24 @@ export default class Resource extends cc.Component {
         }
     }
 
+    /**
+     * 对场景进行自动引用计数(常驻接口将被跳过)
+     * @param scene 
+     * @param delta 
+     */
+    private _autoRefSceneAsset(scene: cc.Scene, delta: number = 1) {
+        for (let i = 0; i < scene.childrenCount; i++) {
+            let node = scene.children[i]
+            //非常驻节点才需要
+            //@ts-expect-error
+            if (!node._persistNode) {
+                this._autoRefNodeAsset(node, delta)
+            }
+
+        }
+        return
+    }
+
     private _autoRefNodeAsset(node: cc.Node, delta: number = 1) {
         let componentList = node.getComponentsInChildren(cc.Component)
         for (let i = 0; i < componentList.length; i++) {
@@ -177,27 +215,28 @@ export default class Resource extends cc.Component {
 
     private _autoRefComponentAsset(component: cc.Component, delta: number = 1) {
         for (let property in component) {
+
+            //跳过setter getter
+            let descriptor = Object.getOwnPropertyDescriptor(component, property)
+            if (!descriptor) {
+                continue
+            }
+
             let value = component[property]
             if (Array.isArray(value)) {
                 this._checkArray(value, delta)
             } else if (value instanceof Map) {
                 this._checkMap(value, delta)
-            } else if (this._checkProperty(property, value, component, delta)) {
+            } else if (this._checkProperty(value, component, delta)) {
                 continue
             }
         }
     }
 
-    private _checkProperty(key: string, value: any, component, delta: number) {
+    private _checkProperty(value: any, component, delta: number) {
         if (value instanceof cc.Asset) {
             if (value instanceof cc.Texture2D) return false
             //if (value instanceof cc.Material && !(cc instanceof cc.MaterialVariant)) return false
-            //跳过setter getter
-            let descriptor = Object.getOwnPropertyDescriptor(component, key)
-            if (!descriptor) {
-                return false
-            }
-
             let asset: cc.Asset = value
             this._autoRefAsset(asset, delta)
             return true
@@ -265,7 +304,11 @@ export default class Resource extends cc.Component {
             onLoad(null, bundle)
         })
     }
-
+    /** 
+     * 替换字体
+     * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口 
+     *      错误示例: label.font = newFont 或者 label.font = null
+     */
     public setSpriteFrame(image: cc.Sprite | cc.Mask, newSpriteFrame: cc.SpriteFrame) {
         if (!image) return
         let oldSpriteFrame = image.spriteFrame
@@ -284,6 +327,11 @@ export default class Resource extends cc.Component {
         }
     }
 
+    /** 
+     * 替换材质
+     * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口 
+     *      错误示例: sprite.setMaterial(0, newMaterial)
+     */
     public setFont(label: cc.Label | cc.RichText, newFont: cc.Font) {
         if (!label) return
         let oldFont = label.font
@@ -312,11 +360,6 @@ export default class Resource extends cc.Component {
         render.setMaterial(index, newMaterial)
     }
 
-    public runScene(newScene: cc.SceneAsset) {
-        // let oldScene = cc.director.getScene()
-        // if (oldScene.uuid == )
-    }
-
     public loadSpriteFrame(bundleName: string, imageName: string, callback: (err?: string, spriteFrame?: cc.SpriteFrame) => void) {
         this.loadAsset(bundleName, imageName, cc.SpriteFrame, callback)
     }
@@ -341,12 +384,46 @@ export default class Resource extends cc.Component {
         this.loadAsset(bundleName, clipPath, cc.AnimationClip, callback)
     }
 
+    // public loadScene(bundleName: string, sceneName: string, callack?: (err: string, sceneAsset: cc.SceneAsset) => void) {
+    //     this.loadBundle(bundleName, (err, bundle: cc.AssetManager.Bundle) => {
+    //         if (err) {
+    //             cc.warn(err)
+    //             callack && callack(err, null)
+    //             return
+    //         }
+    //         let info = bundle.getSceneInfo(sceneName)
+    //         cc.log(info)
+    //         cc.log(bundle)
+    //         cc.assetManager.loadAny({ 'scene': sceneName }, { preset: "scene", bundle: bundleName }, (err: any, sceneAsset) => {
+    //             callack && callack(err, sceneAsset)
+    //         })
+    //     })
+    // }
+
+    /**
+     * 与引擎接口含义一致,加载并运行场景(建议不勾选场景的资源自动释放)
+     */
     public loadScene(sceneName: string, callback?: (err: string, scene: cc.Scene) => void) {
-        cc.director.loadScene(sceneName, (err: string, scene: cc.Scene) => {
-            if (scene) {
-                this._autoRefNodeAsset(scene)
+        //@ts-expect-error
+        let bundleOfScene = cc.assetManager.bundles.find(function (bundle) {
+            return bundle.getSceneInfo(sceneName);
+        });
+        cc.assetManager.loadAny({ 'scene': sceneName }, { preset: "scene", bundle: bundleOfScene.name }, (err, sceneAsset) => {
+            if (err) {
+                cc.warn(err)
+                //@ts-expect-error
+                callback && callback(err, null)
+                return
             }
-            callback && callback(err, scene)
+            let oldScene = cc.director.getScene()
+            this._autoRefSceneAsset(oldScene, -1)
+
+            cc.director.runScene(sceneAsset, (err, newScene: cc.Scene) => {
+                if (newScene) {
+                    this._autoRefSceneAsset(newScene, 1)
+                }
+                callback && callback(err, newScene)
+            })
         })
     }
 
