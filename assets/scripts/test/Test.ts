@@ -17,8 +17,10 @@ export default class Test extends cc.Component {
         let node = cc.find("TestList")
         this.resource = node.getComponent(Resource)
         this.testNode = new cc.Node(this.name)
-        this.testRoot = cc.find("Canvas")
+        this.testRoot = cc.find("CountLabel")
         this.testRoot.addChild(this.testNode)
+        let visibleSize = cc.view.getVisibleSize()
+        this.testNode.setPosition(this.testRoot.convertToNodeSpaceAR(cc.v2(visibleSize.width / 2, visibleSize.height / 2)))
     }
 
     onTest() {
