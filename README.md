@@ -1,4 +1,5 @@
-## cocos creator 资源管理demo(持续迭代中)
+## cocos creator 资源管理demo(通过资源自动引用计数,自动释放 持续迭代中)
+## asset(resource) auto release demo for cocos creator
 ### cocos creator version : 2.4.3+
 --- 
 - @author : lqs
