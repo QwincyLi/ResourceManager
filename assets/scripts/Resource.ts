@@ -438,7 +438,7 @@ export default class Resource extends cc.Component {
     public loadAsset(bundleName: string, assetName: string, type: typeof cc.Asset, callback?: (err?: string, asset?: cc.Asset) => void) {
         this.loadBundle(bundleName, (err: string, bundle: cc.AssetManager.Bundle) => {
             if (!err) {
-                let info = bundle.getInfoWithPath(assetName)
+                let info = bundle.getInfoWithPath(assetName, type)
                 if (info) {
                     let uuid = info.uuid //cc.assetManager.assets里面存储的key
                     if (uuid) {
