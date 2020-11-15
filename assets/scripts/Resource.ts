@@ -18,6 +18,7 @@ export default class Resource extends cc.Component {
     }
 
     public instantiateNode(prefabOrNode: cc.Prefab | cc.Node): cc.Node {
+        if (!prefabOrNode) return null
         if (this.autoRef && prefabOrNode instanceof cc.Prefab) {
             //预制资源添加引用(如果单次创建 实例化后不需要保留预制资源的引用的话 则需要调用decRef 将预制手动释放掉)
             this.addRef(prefabOrNode)
@@ -42,6 +43,7 @@ export default class Resource extends cc.Component {
      * @param count 
      */s
     public instantiateNodeMultip(prefabOrNode: cc.Prefab | cc.Node, count: number = 1): cc.Node[] {
+        if (!prefabOrNode) return null
         let isPrefab = prefabOrNode instanceof cc.Prefab
         if (this.autoRef && isPrefab) {
             //预制添加引用
@@ -138,12 +140,15 @@ export default class Resource extends cc.Component {
     }
 
     private _autoRefAsset(asset: cc.Asset, delta) {
-        //内置材质 跳过(内置材质引用计数减为0其实也没释放掉)
         if (asset instanceof cc.Material) {
             //@ts-expect-error
             let material = asset instanceof cc.MaterialVariant ? asset.material : asset
+            //内置材质 跳过(内置材质引用计数减为0其实也没释放掉)
             if (cc.assetManager.builtins.getBuiltin("material", material.name)) {
                 return
+            } else {
+                //对材质变体增减引用计数其实就是对材质本身操作
+                asset = material
             }
         }
 
@@ -298,9 +303,10 @@ export default class Resource extends cc.Component {
         if (index < 0) return
         if (index >= render.getMaterials().length) return
         let oldMaterial = render.getMaterial(index)
-        if (oldMaterial == newMaterial) return
-        if (oldMaterial)
+        //if (oldMaterial == newMaterial) return //getMaterial获取的是材质变体 肯定无法相等 在引用管理内部会对此进行处理(_autoRefAsset)
+        if (oldMaterial) {
             this.decRef(oldMaterial)
+        }
         if (newMaterial)
             this.addRef(newMaterial)
         render.setMaterial(index, newMaterial)

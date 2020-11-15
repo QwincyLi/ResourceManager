@@ -7,9 +7,9 @@ export default class AssetCount extends cc.Component {
     label: cc.Label = null
 
     start() {
-        this.schedule(() => {
-            cc.log(cc.assetManager.assets)
-        }, 5)
+        // this.schedule(() => {
+        //     cc.log(cc.assetManager.assets)
+        // }, 5)
     }
 
     update() {
