@@ -14,10 +14,10 @@ export default class Test extends cc.Component {
     releaseString: string = "释放"
 
     onLoad() {
-        let node = cc.find("Resource")
+        let node = cc.find("TestList")
         this.resource = node.getComponent(Resource)
         this.testNode = new cc.Node(this.name)
-        this.testRoot = cc.find("GameEntry")
+        this.testRoot = cc.find("Canvas")
         this.testRoot.addChild(this.testNode)
     }
 
@@ -25,5 +25,10 @@ export default class Test extends cc.Component {
         this.testFlag = !this.testFlag
         let label = this.node.getComponentInChildren(cc.Label)
         label.string = this.testFlag ? this.releaseString : this.loadString
+    }
+
+    onDestroy() {
+        if (this.testFlag)
+            this.onTest()
     }
 }

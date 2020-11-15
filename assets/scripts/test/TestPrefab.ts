@@ -17,7 +17,6 @@ export default class TestPrefab extends Test {
                 if (!err) {
                     let node = Resource.instantiateNode(prefab)
                     this.testNode.addChild(node)
-
                 }
             })
         } else {

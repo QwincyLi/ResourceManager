@@ -312,6 +312,11 @@ export default class Resource extends cc.Component {
         render.setMaterial(index, newMaterial)
     }
 
+    public runScene(newScene: cc.SceneAsset) {
+        // let oldScene = cc.director.getScene()
+        // if (oldScene.uuid == )
+    }
+
     public loadSpriteFrame(bundleName: string, imageName: string, callback: (err?: string, spriteFrame?: cc.SpriteFrame) => void) {
         this.loadAsset(bundleName, imageName, cc.SpriteFrame, callback)
     }
@@ -324,12 +329,25 @@ export default class Resource extends cc.Component {
         this.loadAsset(bundleName, prefabPath, cc.Prefab, callback)
     }
 
+    public loadSpine(bundleName: string, spinePath: string, callback?: (err?: string, spine?: sp.SkeletonData) => void) {
+        this.loadAsset(bundleName, spinePath, sp.SkeletonData, callback)
+    }
+
     public loadAudioClip(bundleName: string, audioClipPath: string, callback: (err: string, clip: cc.AudioClip) => void) {
         this.loadAsset(bundleName, audioClipPath, cc.AudioClip, callback)
     }
 
     public loadAnimationClip(bundleName: string, clipPath: string, callback: (err: string, clip: cc.AnimationClip) => void) {
         this.loadAsset(bundleName, clipPath, cc.AnimationClip, callback)
+    }
+
+    public loadScene(sceneName: string, callback?: (err: string, scene: cc.Scene) => void) {
+        cc.director.loadScene(sceneName, (err: string, scene: cc.Scene) => {
+            if (scene) {
+                this._autoRefNodeAsset(scene)
+            }
+            callback && callback(err, scene)
+        })
     }
 
     /**
@@ -343,16 +361,15 @@ export default class Resource extends cc.Component {
     public loadAsset(bundleName: string, assetName: string, type: typeof cc.Asset, callback?: (err?: string, asset?: cc.Asset) => void) {
         this.loadBundle(bundleName, (err: string, bundle: cc.AssetManager.Bundle) => {
             if (!err) {
-                //hack 将路径转换为uuid (参考引擎资源加载管线中 urlTransformer 实现)
-                //@ts-expect-error
-                let config = bundle._config;
-                let info = config.getInfoWithPath(assetName, type);
+                let info = bundle.getInfoWithPath(assetName)
                 if (info) {
                     let uuid = info.uuid //cc.assetManager.assets里面存储的key
-                    let cachedAsset = cc.assetManager.assets.get(uuid)
-                    if (cachedAsset) {
-                        callback && callback(null, cachedAsset)
-                        return
+                    if (uuid) {
+                        let cachedAsset = cc.assetManager.assets.get(uuid)
+                        if (cachedAsset) {
+                            callback && callback(null, cachedAsset)
+                            return
+                        }
                     }
                 }
                 bundle.load(assetName, type, (err, asset: cc.Asset) => {

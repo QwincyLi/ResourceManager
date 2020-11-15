@@ -6,10 +6,8 @@ export default class AssetCount extends cc.Component {
     @property(cc.Label)
     label: cc.Label = null
 
-    start() {
-        // this.schedule(() => {
-        //     cc.log(cc.assetManager.assets)
-        // }, 5)
+    onLoad() {
+        cc.game.addPersistRootNode(this.node)
     }
 
     update() {
