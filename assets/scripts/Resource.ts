@@ -57,7 +57,7 @@ export default class Resource extends cc.Component {
             this.addRef(prefabOrNode as cc.Prefab, count)
         }
         let nodeList = []
-        for (let i = 0; i < nodeList.length; i++) {
+        for (let i = 0; i < count; i++) {
             let node = cc.instantiate(prefabOrNode as cc.Node)
             nodeList.push(node)
         }
@@ -284,7 +284,7 @@ export default class Resource extends cc.Component {
             onLoad(null, cacheBundle)
             return
         }
-        cc.log("bundle加载: " + bundleName)
+        //cc.log("bundle加载: " + bundleName)
         cc.assetManager.loadBundle(bundleName, (err, bundle: cc.AssetManager.Bundle) => {
             if (err) {
                 cc.warn(err)
@@ -298,7 +298,7 @@ export default class Resource extends cc.Component {
                     if (cc.assetManager.bundles.get(depBundleName)) {
 
                     } else {
-                        cc.log("bundle依赖加载: " + bundleName + " - " + depBundleName)
+                        //cc.log("bundle依赖加载: " + bundleName + " - " + depBundleName)
                         cc.assetManager.loadBundle(depBundleName, (depErr, depBundle) => {
                             if (depErr) {
                                 cc.warn(depErr)
