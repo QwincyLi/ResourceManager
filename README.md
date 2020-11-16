@@ -71,8 +71,18 @@ setMaterial(render: cc.RenderComponent, index: number, newMaterial: cc.Material)
 ``` typescript
 /**
  * 加载bundle 若已缓存则直接同步执行回调
+ * @param bundleName bundle包名
  */
 loadBundle(bundleName: string, onLoad : (err : string, bundle : cc.AssetManager.Bundle))
+/**
+ * 从指定资源包中加载指定资源
+ *
+ * @param bundleName bundle包名
+ * @param assetName 资源名称
+ * @param type 资源类型
+ * @param callback 加载完成 回调函数
+ */
+loadAsset(bundleName: string, assetName: string, type: typeof cc.Asset, callback?: (err?: string, asset?: cc.Asset) => void)
 //下面的这些具体类型 只是为了减少类型声明手写代码量
 loadSpriteFrame(bundleName: string, imageName: string, callback: (err?: string, spriteFrame?: cc.SpriteFrame) => void)
 loadMaterial(bundleName: string, materialPath: string, callback?: (err?: string, material?: cc.Material) => void) 

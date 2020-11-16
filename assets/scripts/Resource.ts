@@ -114,15 +114,6 @@ export default class Resource extends cc.Component {
     public addRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef) {
             this._autoRefAsset(asset, delta)
-            //子资源引用计数管理
-            if (asset instanceof cc.SpriteAtlas) {
-                let sprites = asset.getSpriteFrames()
-                for (let i = 0; i < sprites.length; i++) {
-                    this._autoRefAsset(sprites[i], delta)
-                }
-            } else if (asset instanceof cc.Prefab) {
-                this._autoRefNodeAsset(asset.data, 1)
-            }
             // if (CC_PREVIEW) {
             //     cc.log(new Date().toLocaleTimeString() + " : " + asset.name + " 引用计数+1, 剩余 " + asset.refCount)
             // }
@@ -136,30 +127,17 @@ export default class Resource extends cc.Component {
      */
     public decRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef && asset) {
-            //子资源引用计数管理
-            if (asset instanceof cc.SpriteAtlas) {
-                let sprites = asset.getSpriteFrames()
-                for (let i = 0; i < sprites.length; i++) {
-                    this._autoRefAsset(sprites[i], -1 * delta)
-                }
-            } else if (asset instanceof cc.Prefab) {
-                this._autoRefNodeAsset(asset.data, -1 * delta)
-            }
-            // else if (asset instanceof cc.Material) {
-            //     let effectAsset = asset.effectAsset
-            //     if (effectAsset) {
-            //         this._autoRefAsset(effectAsset, -1 * delta)
-            //     }
-            // }
             this._autoRefAsset(asset, -1 * delta)
             // if (CC_PREVIEW) {
             //     cc.log(new Date().toLocaleTimeString() + " : " + asset.name + " 引用计数-1, 剩余 " + asset.refCount)
             // }
-
         }
     }
 
     private _autoRefAsset(asset: cc.Asset, delta) {
+        if (!asset) return
+        if (delta == 0) return
+
         if (asset instanceof cc.Material) {
             //@ts-expect-error
             let material = asset instanceof cc.MaterialVariant ? asset.material : asset
@@ -171,7 +149,41 @@ export default class Resource extends cc.Component {
                 asset = material
             }
         }
+        this._autoRef(asset, delta)
+        //处理子资源引用计数
+        this._autoRefSubAsset(asset, delta)
 
+        if (asset.refCount <= 0 && CC_PREVIEW)
+            cc.log(asset.name + " 将被释放")
+    }
+
+    private _autoRefSubAsset(asset: cc.Asset, delta) {
+        if (!asset) return
+        if (delta == 0) return
+
+        //子资源引用计数管理
+        if (asset instanceof cc.SpriteAtlas) {
+            let sprites = asset.getSpriteFrames()
+            for (let i = 0; i < sprites.length; i++) {
+                this._autoRef(sprites[i], delta)
+            }
+        } else if (asset instanceof cc.Prefab) {
+            this._autoRefNodeAsset(asset.data, delta)
+        } else if (asset instanceof cc.BitmapFont) {
+            //@ts-expect-error
+            this._autoRef(asset.spriteFrame, delta)
+        }
+        // else if (asset instanceof cc.Material) {
+        //     let effectAsset = asset.effectAsset
+        //     if (effectAsset) {
+        //         this._autoRefAsset(effectAsset, -1 * delta)
+        //     }
+        // }
+    }
+
+    _autoRef(asset: cc.Asset, delta) {
+        if (!asset) return
+        if (delta == 0) return
         if (delta > 0) {
             if (asset.refCount <= 0 && CC_PREVIEW)
                 cc.log(asset.name + " 将被自动引用管理")
@@ -200,7 +212,6 @@ export default class Resource extends cc.Component {
             if (!node._persistNode) {
                 this._autoRefNodeAsset(node, delta)
             }
-
         }
         return
     }
@@ -236,7 +247,6 @@ export default class Resource extends cc.Component {
     private _checkProperty(value: any, component, delta: number) {
         if (value instanceof cc.Asset) {
             if (value instanceof cc.Texture2D) return false
-            //if (value instanceof cc.Material && !(cc instanceof cc.MaterialVariant)) return false
             let asset: cc.Asset = value
             this._autoRefAsset(asset, delta)
             return true
