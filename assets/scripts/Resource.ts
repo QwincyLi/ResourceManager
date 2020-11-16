@@ -152,9 +152,6 @@ export default class Resource extends cc.Component {
         this._autoRef(asset, delta)
         //处理子资源引用计数
         this._autoRefSubAsset(asset, delta)
-
-        if (asset.refCount <= 0 && CC_PREVIEW)
-            cc.log(asset.name + " 将被释放")
     }
 
     private _autoRefSubAsset(asset: cc.Asset, delta) {
@@ -185,8 +182,8 @@ export default class Resource extends cc.Component {
         if (!asset) return
         if (delta == 0) return
         if (delta > 0) {
-            if (asset.refCount <= 0 && CC_PREVIEW)
-                cc.log(asset.name + " 将被自动引用管理")
+            // if (asset.refCount <= 0 && CC_PREVIEW)
+            //     cc.log(asset.name + " 将被自动引用管理")
             for (let i = 0; i < delta; i++) {
                 asset.addRef()
             }
@@ -194,8 +191,8 @@ export default class Resource extends cc.Component {
             for (let i = delta; i < 0; i++) {
                 asset.decRef()
             }
-            if (asset.refCount <= 0 && CC_PREVIEW)
-                cc.log(asset.name + " 将被释放")
+            // if (asset.refCount <= 0 && CC_PREVIEW)
+            //     cc.log(asset.name + " 将被释放")
         }
     }
 
