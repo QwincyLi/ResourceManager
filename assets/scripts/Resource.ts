@@ -81,6 +81,7 @@ export default class Resource extends cc.Component {
     public destroyNode(node: cc.Node) {
         if (node && cc.isValid(node)) {
             if (this.autoRef) {
+                this._autoRefNodeAsset(node, -1)
                 //hack 根据标记的预}制来源 减少预制的引用
                 //@ts-expect-error
                 if (node._uuid) {
@@ -91,7 +92,6 @@ export default class Resource extends cc.Component {
                         this.decRef(prefab)
                     }
                 }
-                this._autoRefNodeAsset(node, -1)
             }
             node.destroy()
         }
@@ -114,9 +114,6 @@ export default class Resource extends cc.Component {
     public addRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef) {
             this._autoRefAsset(asset, delta)
-            // if (CC_PREVIEW) {
-            //     cc.log(new Date().toLocaleTimeString() + " : " + asset.name + " 引用计数+1, 剩余 " + asset.refCount)
-            // }
         }
     }
 
@@ -128,9 +125,6 @@ export default class Resource extends cc.Component {
     public decRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef && asset) {
             this._autoRefAsset(asset, -1 * delta)
-            // if (CC_PREVIEW) {
-            //     cc.log(new Date().toLocaleTimeString() + " : " + asset.name + " 引用计数-1, 剩余 " + asset.refCount)
-            // }
         }
     }
 
@@ -138,6 +132,7 @@ export default class Resource extends cc.Component {
         if (!asset) return
         if (delta == 0) return
 
+        //材质特殊处理
         if (asset instanceof cc.Material) {
             //@ts-expect-error
             let material = asset instanceof cc.MaterialVariant ? asset.material : asset
@@ -148,29 +143,32 @@ export default class Resource extends cc.Component {
                 //对材质变体增减引用计数其实就是对材质本身操作
                 asset = material
             }
+            this._autoRef(asset, delta)
+            return
+        } else if (asset instanceof cc.Prefab) { //prefab 增加引用计数的时候 用到的资源都进行了增加 所以需要释放
+            this._autoRefNodeAsset(asset.data, delta)
+            this._autoRef(asset, delta)
+            return
         }
         this._autoRef(asset, delta)
-        //处理子资源引用计数
         this._autoRefSubAsset(asset, delta)
     }
 
+    /**
+     * 处理子资源引用计数 引擎层面的处理会使得子资源数量+1
+     * @param asset 
+     * @param delta 
+     */
     private _autoRefSubAsset(asset: cc.Asset, delta) {
-        //prefab 增加引用计数的时候 用到的资源都进行了增加 所以需要释放
-        if (asset instanceof cc.Prefab) {
-            this._autoRefNodeAsset(asset.data, delta)
-            return
-        }
-        //当资源引用计数为0,并释放资源时 引擎会为子资源减少一个引用计数 始终保持子资源引用计数比资源本身+1
         if (asset instanceof cc.SpriteAtlas) {
             let sprites = asset.getSpriteFrames()
             for (let i = 0; i < sprites.length; i++) {
-                this._autoRef(sprites[i], asset.refCount - sprites[i].refCount + 1)
+                this._autoRef(sprites[i], asset.refCount - sprites[i].refCount)
             }
         } else if (asset instanceof cc.BitmapFont) {
             //@ts-expect-error
-            this._autoRef(asset.spriteFrame, asset.refCount - (asset.spriteFrame as cc.SpriteFrame).refCount + 1)
+            this._autoRef(asset.spriteFrame, asset.refCount - (asset.spriteFrame as cc.SpriteFrame).refCount)
         }
-
         // else if (asset instanceof cc.Material) {
         //     let effectAsset = asset.effectAsset
         //     if (effectAsset) {
@@ -333,11 +331,6 @@ export default class Resource extends cc.Component {
         }
     }
 
-    /** 
-     * 替换材质
-     * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口 
-     *      错误示例: sprite.setMaterial(0, newMaterial)
-     */
     public setFont(label: cc.Label | cc.RichText, newFont: cc.Font) {
         if (!label) return
         let oldFont = label.font
@@ -352,6 +345,11 @@ export default class Resource extends cc.Component {
         label.font = newFont
     }
 
+    /** 
+    * 替换材质
+    * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口 
+    *      错误示例: sprite.setMaterial(0, newMaterial)
+    */
     public setMaterial(render: cc.RenderComponent, index: number, newMaterial: cc.Material) {
         //边界条件检查
         if (index < 0) return

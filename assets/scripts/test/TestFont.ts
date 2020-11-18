@@ -18,6 +18,7 @@ export default class TestFont extends Test {
         super.onTest()
         const Resource = this.resource
         if (this.testFlag) {
+            cc.log("添加引用")
             Resource.loadPrefab("bundles", "prefabs/Font", (err, prefab) => {
                 if (!err) {
                     let node = Resource.instantiateNode(prefab)
@@ -41,6 +42,7 @@ export default class TestFont extends Test {
             Resource.destroyAllChildrenNode(this.testNode)
             this.testLabel.string = ""
             Resource.setFont(this.testLabel, null)
+            cc.log("释放引用")
         }
     }
 
