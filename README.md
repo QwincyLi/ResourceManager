@@ -85,6 +85,7 @@ loadBundle(bundleName: string, onLoad : (err : string, bundle : cc.AssetManager.
 loadAsset(bundleName: string, assetName: string, type: typeof cc.Asset, callback?: (err?: string, asset?: cc.Asset) => void)
 //下面的这些具体类型 只是为了减少类型声明手写代码量
 loadSpriteFrame(bundleName: string, imageName: string, callback: (err?: string, spriteFrame?: cc.SpriteFrame) => void)
+loadFont(bundleName: string, fontPath: string, callback?: (err?: string, font?: cc.Font) => void) 
 loadMaterial(bundleName: string, materialPath: string, callback?: (err?: string, material?: cc.Material) => void) 
 loadPrefab(bundleName: string, prefabPath: string, callback: (err?: string, prefab?: cc.Prefab) => void) 
 loadSpine(bundleName: string, spinePath: string, callback?: (err?: string, spine?: sp.SkeletonData) => void)

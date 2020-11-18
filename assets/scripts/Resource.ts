@@ -79,7 +79,7 @@ export default class Resource extends cc.Component {
      * @param node 
      */
     public destroyNode(node: cc.Node) {
-        if (node) {
+        if (node && cc.isValid(node)) {
             if (this.autoRef) {
                 //hack 根据标记的预}制来源 减少预制的引用
                 //@ts-expect-error
@@ -155,21 +155,22 @@ export default class Resource extends cc.Component {
     }
 
     private _autoRefSubAsset(asset: cc.Asset, delta) {
-        if (!asset) return
-        if (delta == 0) return
-
-        //子资源引用计数管理
+        //prefab 增加引用计数的时候 用到的资源都进行了增加 所以需要释放
+        if (asset instanceof cc.Prefab) {
+            this._autoRefNodeAsset(asset.data, delta)
+            return
+        }
+        //当资源引用计数为0,并释放资源时 引擎会为子资源减少一个引用计数 始终保持子资源引用计数比资源本身+1
         if (asset instanceof cc.SpriteAtlas) {
             let sprites = asset.getSpriteFrames()
             for (let i = 0; i < sprites.length; i++) {
-                this._autoRef(sprites[i], delta)
+                this._autoRef(sprites[i], asset.refCount - sprites[i].refCount + 1)
             }
-        } else if (asset instanceof cc.Prefab) {
-            this._autoRefNodeAsset(asset.data, delta)
         } else if (asset instanceof cc.BitmapFont) {
             //@ts-expect-error
-            this._autoRef(asset.spriteFrame, delta)
+            this._autoRef(asset.spriteFrame, asset.refCount - (asset.spriteFrame as cc.SpriteFrame).refCount + 1)
         }
+
         // else if (asset instanceof cc.Material) {
         //     let effectAsset = asset.effectAsset
         //     if (effectAsset) {
@@ -179,8 +180,6 @@ export default class Resource extends cc.Component {
     }
 
     _autoRef(asset: cc.Asset, delta) {
-        if (!asset) return
-        if (delta == 0) return
         if (delta > 0) {
             // if (asset.refCount <= 0 && CC_PREVIEW)
             //     cc.log(asset.name + " 将被自动引用管理")
@@ -369,6 +368,10 @@ export default class Resource extends cc.Component {
 
     public loadSpriteFrame(bundleName: string, imageName: string, callback: (err?: string, spriteFrame?: cc.SpriteFrame) => void) {
         this.loadAsset(bundleName, imageName, cc.SpriteFrame, callback)
+    }
+
+    public loadFont(bundleName: string, fontPath: string, callback?: (err?: string, font?: cc.Font) => void) {
+        this.loadAsset(bundleName, fontPath, cc.Font, callback)
     }
 
     public loadMaterial(bundleName: string, materialPath: string, callback?: (err?: string, material?: cc.Material) => void) {
