@@ -257,6 +257,32 @@ export default class Resource extends cc.Component {
         }
     }
 
+    /**
+     * 用户自定义资源属性自动引用计数管理
+     * @param custom 
+     * @param delta 
+     */
+    private _autoCustomComponentAsset(custom: cc.Component, delta) {
+        if (custom instanceof SlowlyRef) {
+            //循环遍历所有属性是有一定性能负担 可以根据项目实行更严苛得管理
+            for (let property in custom) {
+                //跳过setter getter
+                let descriptor = Object.getOwnPropertyDescriptor(custom, property)
+                if (!descriptor) {
+                    continue
+                }
+                let value = custom[property]
+                if (Array.isArray(value)) {
+                    this._checkArray(value, delta)
+                } else if (value instanceof Map) {
+                    this._checkMap(value, delta)
+                } else if (this._checkProperty(value, delta)) {
+                    continue
+                }
+            }
+        }
+    }
+
     private _autoRefComponentAsset(component: cc.Component, delta: number = 1) {
         if (component instanceof cc.Sprite) {  //精灵
             let sprite = component
@@ -322,23 +348,9 @@ export default class Resource extends cc.Component {
         } else if (component instanceof dragonBones.ArmatureDisplay) {
             this._autoRefAsset(component.dragonAsset, delta)
             this._autoRefAsset(component.dragonAtlasAsset, delta)
-        } else if (component instanceof SlowlyRef) {
-            //循环遍历所有属性是有一定性能负担 可以根据项目实行更严苛得管理
-            for (let property in component) {
-                //跳过setter getter
-                let descriptor = Object.getOwnPropertyDescriptor(component, property)
-                if (!descriptor) {
-                    continue
-                }
-                let value = component[property]
-                if (Array.isArray(value)) {
-                    this._checkArray(value, delta)
-                } else if (value instanceof Map) {
-                    this._checkMap(value, delta)
-                } else if (this._checkProperty(value, delta)) {
-                    continue
-                }
-            }
+        } else {
+            //自定义脚本部分
+            this._autoCustomComponentAsset(component, delta)
         }
 
         // //所有组件全部暴力轮询(最初版本)
