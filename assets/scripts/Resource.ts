@@ -264,7 +264,7 @@ export default class Resource extends cc.Component {
      */
     private _autoCustomComponentAsset(custom: cc.Component, delta) {
         if (custom instanceof SlowlyRef) {
-            //循环遍历所有属性是有一定性能负担 可以根据项目实行更严苛得管理
+            //循环遍历所有属性是有一定性能负担
             for (let property in custom) {
                 //跳过setter getter
                 let descriptor = Object.getOwnPropertyDescriptor(custom, property)
@@ -463,6 +463,40 @@ export default class Resource extends cc.Component {
         } catch (e) {
             cc.warn(e)
         }
+    }
+
+    /**
+     * 替换按钮状态纹理
+     */
+    public setButtonSpriteFrame(button: cc.Button, newNormalSpriteFrame: cc.SpriteFrame, newPressedSpriteFrame: cc.SpriteFrame, newHoverSpriteFrame: cc.SpriteFrame, newDisableSpriteFrame: cc.SpriteFrame) {
+        if (!button) return
+        let oldNormalSpriteFrame = button.normalSprite
+        let oldPressedSpriteFrame = button.pressedSprite
+        let oldHoverSpriteFrame = button.hoverSprite
+        let oldDisableSpriteFrame = button.disabledSprite
+
+        if (oldNormalSpriteFrame)
+            this.decRef(oldNormalSpriteFrame, -1)
+        if (oldPressedSpriteFrame)
+            this.decRef(oldPressedSpriteFrame, -1)
+        if (oldHoverSpriteFrame)
+            this.decRef(oldHoverSpriteFrame, -1)
+        if (oldDisableSpriteFrame)
+            this.decRef(oldDisableSpriteFrame, -1)
+
+        if (newNormalSpriteFrame)
+            this.addRef(newNormalSpriteFrame, 1)
+        if (newPressedSpriteFrame)
+            this.addRef(newPressedSpriteFrame, 1)
+        if (newHoverSpriteFrame)
+            this.addRef(newHoverSpriteFrame, 1)
+        if (newDisableSpriteFrame)
+            this.addRef(newDisableSpriteFrame, 1)
+
+        button.normalSprite = newNormalSpriteFrame
+        button.pressedSprite = newPressedSpriteFrame
+        button.hoverSprite = newHoverSpriteFrame
+        button.disabledSprite = newDisableSpriteFrame
     }
 
     /** 
