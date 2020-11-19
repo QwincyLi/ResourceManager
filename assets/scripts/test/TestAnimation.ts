@@ -29,6 +29,8 @@ export default class TestAnimation extends Test {
             })
         } else {
             Resource.destroyAllChildrenNode(this.testNode)
+            this.animationPrefab = null
+            this.animationPrefab = null
         }
     }
 

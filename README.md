@@ -1,20 +1,21 @@
 ## cocos creator 资源管理demo(通过资源自动引用计数,自动释放 持续迭代中)
 ## asset(resource) auto release demo for cocos creator
 ### cocos creator version : 2.4.3+
+---
+
+### Resource Demo: https://github.com/QinSheng-Li/ResourceDemo
+### 项目资源来自 : [cocos-creator/example-cases](https://github.com/cocos-creator/example-cases)
 --- 
 - @author : lqs
 - @license : MIT
 - @email : 1053128593@qq.com
-
 ---  
 ### FAQ:
-- 1.预加载: 直接使用引擎接口即可
-- 2.资源常驻: 在加载完成得回调中调用本模块的addRef接口(非引擎自带的资源addRef)
-- 3.资源加载接口与引擎接口的区别: 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步)
-- 4.场景的资源自动释放是否需要勾选: 建议不勾选(若已经采用本套方案,为了避免未知错误,建议不勾选)
----
-### Demo: https://github.com/QinSheng-Li/ResourceDemo
----
+- 1.如何使用: 将Resource、SlowlyRef两个文件引入项目(需要挂载资源的自定义脚本需要继承SlowlyRef组件,示例：TestSlolyComponent)
+- 2.预加载: 直接使用引擎接口即可
+- 3.资源常驻: 在加载完成得回调中调用本模块的addRef接口(非引擎自带的资源addRef)
+- 4.资源加载接口与引擎接口的区别: 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步)
+- 5.场景的资源自动释放是否需要勾选: 建议不勾选(若已经采用本套方案,为了避免未知错误,建议不勾选,并且切换场景时请使用Resource下的loadScene接口进行引用管理)
 ### API:
 #### 1. 资源引用计数
 ``` typescript
@@ -66,8 +67,12 @@ setFont(label: cc.Label | cc.RichText, newFont: cc.Font)
  *      错误示例: sprite.setMaterial(0, newMaterial)
  */
 setMaterial(render: cc.RenderComponent, index: number, newMaterial: cc.Material) 
+/**
+ * 替换龙骨资源
+ */
+setDragonBones(dragonBones: dragonBones.ArmatureDisplay, newDragonBonesAsset: dragonBones.DragonBonesAsset, newDragonBonesAltas: dragonBones.DragonBonesAtlasAsset)
 ```
-#### 2. 资源加载(与引擎接口的区别是: 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步)
+#### 2. 资源加载(与引擎接口的区别是: 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步,如果不需要可以不使用（但loadScene需要使用本模块的进行引用管理)
 ``` typescript
 /**
  * 加载bundle 若已缓存则直接同步执行回调
@@ -88,7 +93,6 @@ loadSpriteFrame(bundleName: string, imageName: string, callback: (err?: string, 
 loadFont(bundleName: string, fontPath: string, callback?: (err?: string, font?: cc.Font) => void) 
 loadMaterial(bundleName: string, materialPath: string, callback?: (err?: string, material?: cc.Material) => void) 
 loadPrefab(bundleName: string, prefabPath: string, callback: (err?: string, prefab?: cc.Prefab) => void) 
-loadSpine(bundleName: string, spinePath: string, callback?: (err?: string, spine?: sp.SkeletonData) => void)
 loadAudioClip(bundleName: string, audioClipPath: string, callback: (err: string, clip: cc.AudioClip) => void) 
 loadAnimationClip(bundleName: string, clipPath: string, callback: (err: string, clip: cc.AnimationClip) => void) 
 /**

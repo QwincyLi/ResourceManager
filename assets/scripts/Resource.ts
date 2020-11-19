@@ -1,3 +1,5 @@
+import SlowlyRef from "./SlowlyRef";
+
 const { ccclass, property, menu } = cc._decorator;
 
 /**
@@ -26,12 +28,14 @@ export default class Resource extends cc.Component {
      */
     public instantiateNode(prefabOrNode: cc.Prefab | cc.Node): cc.Node {
         if (!prefabOrNode) return null
+        // let performance1 = performance.now()
         if (this.autoRef && prefabOrNode instanceof cc.Prefab) {
             //预制资源添加引用(如果单次创建 实例化后不需要保留预制资源的引用的话 则需要调用decRef 将预制手动释放掉)
             this.addRef(prefabOrNode)
         }
+        // let performance2 = performance.now()
         let node = cc.instantiate(prefabOrNode as cc.Node)
-
+        // let performance3 = performance.now()
         if (this.autoRef) {
             // @ts-expect-error
             if (prefabOrNode._uuid) {
@@ -41,6 +45,13 @@ export default class Resource extends cc.Component {
             }
             this._autoRefNodeAsset(node)
         }
+        // let performance4 = performance.now()
+        // let engineDuration = performance3 - performance2
+        // let totalDuration = performance4 - performance1
+        // let resourceDuration = totalDuration - engineDuration
+        // cc.log(`${prefabOrNode.name} 引擎实例化耗时 ${engineDuration}`)
+        // cc.log(`${prefabOrNode.name} Resource实例化耗时 ${resourceDuration}`)
+        // cc.log(`${prefabOrNode.name} 总共实例化耗时 ${totalDuration}`)
         return node
     }
 
@@ -199,8 +210,10 @@ export default class Resource extends cc.Component {
      * @param delta 
      */
     private _autoRefSceneAsset(scene: cc.Scene, delta: number = 1) {
-        for (let i = 0; i < scene.childrenCount; i++) {
-            let node = scene.children[i]
+        let sceneChildren = scene.children
+        let sceneChildrenCount = scene.childrenCount
+        for (let i = 0; i < sceneChildrenCount; i++) {
+            let node = sceneChildren[i]
             //非常驻节点才需要
             //@ts-expect-error
             if (!node._persistNode) {
@@ -211,34 +224,142 @@ export default class Resource extends cc.Component {
     }
 
     private _autoRefNodeAsset(node: cc.Node, delta: number = 1) {
-        let componentList = node.getComponentsInChildren(cc.Component)
-        for (let i = 0; i < componentList.length; i++) {
-            let component = componentList[i]
-            this._autoRefComponentAsset(component, delta)
+        //子节点
+        let nodeChilren = node.children
+        let nodeChilrenCount = node.childrenCount
+        for (let i = 0; i < nodeChilrenCount; i++) {
+            this._autoRefNodeAsset(nodeChilren[i], delta)
+        }
+
+        //组件
+        //@ts-ignore
+        let nodeComponents = node._components as cc.Component[]
+        let nodeComponentCount = nodeComponents.length
+        for (let i = 0; i < nodeComponentCount; i++) {
+            this._autoRefComponentAsset(nodeComponents[i], delta)
+        }
+    }
+
+    private _autoRefRenderComponentAsset(render: cc.RenderComponent, delta) {
+        let materialList = render.getMaterials()
+        for (let j = 0; j < materialList.length; j++) {
+            let material = materialList[j]
+            if (material) {
+                this._autoRefAsset(material, delta)
+            }
+        }
+    }
+
+    private _autoRefAnimationComponentAsset(animation: cc.Animation, delta) {
+        let clips = animation.getClips()
+        for (let i = 0; i < clips.length; i++) {
+            this._autoRefAsset(clips[i], delta)
         }
     }
 
     private _autoRefComponentAsset(component: cc.Component, delta: number = 1) {
-        for (let property in component) {
-
-            //跳过setter getter
-            let descriptor = Object.getOwnPropertyDescriptor(component, property)
-            if (!descriptor) {
-                continue
+        if (component instanceof cc.Sprite) {  //精灵
+            let sprite = component
+            if (sprite) {
+                if (sprite.spriteFrame) {
+                    this._autoRefAsset(sprite.spriteFrame, delta)
+                }
+                this._autoRefRenderComponentAsset(sprite, delta)
             }
+        } else if (component instanceof cc.Button) {//按钮
 
-            let value = component[property]
-            if (Array.isArray(value)) {
-                this._checkArray(value, delta)
-            } else if (value instanceof Map) {
-                this._checkMap(value, delta)
-            } else if (this._checkProperty(value, component, delta)) {
-                continue
+            let button = component
+            if (button.normalSprite) {
+                this._autoRefAsset(button.normalSprite, delta)
+            }
+            if (button.pressedSprite) {
+                this._autoRefAsset(button.normalSprite, delta)
+            }
+            if (button.hoverSprite) {
+                this._autoRefAsset(button.hoverSprite, delta)
+            }
+            if (button.disabledSprite) {
+                this._autoRefAsset(button.disabledSprite, delta)
+            }
+        } else if (component instanceof cc.Label) {
+
+            let label = component
+            if (label.font)
+                this._autoRefAsset(label.font, delta)
+            this._autoRefRenderComponentAsset(label, delta)
+        } else if (component instanceof cc.RichText) {
+            let richText = component
+            if (richText) {
+                if (richText.font)
+                    this._autoRefAsset(richText.font, delta)
+                if (richText.imageAtlas) {
+                    this._autoRefAsset(richText.imageAtlas, delta)
+                }
+            }
+        } else if (component instanceof cc.ParticleSystem) {
+            if (component.file) {
+                this._autoRefSubAsset(component.file, delta)
+            }
+            if (component.spriteFrame) {
+                this._autoRefAsset(component.spriteFrame, delta)
+            }
+        } else if (component instanceof cc.PageViewIndicator) {
+            if (component.spriteFrame) {
+                this._autoRefAsset(component.spriteFrame, delta)
+            }
+            // //新版本已经将输入框背景解耦出来成一个独立节点了 如果是旧版本或者cc.EditBox的引用出现问题则放开此注释
+            // } else if (component instanceof cc.EditBox) {
+            //     let editBox = component
+            //     if (editBox.backgroundImage) {
+            //         this._autoRefAsset(editBox.backgroundImage, delta)
+            //     }
+        } else if (component instanceof cc.Mask) {
+            if (component.spriteFrame) { this._autoRefAsset(component.spriteFrame, delta) }
+        } else if (component instanceof cc.Animation) {
+            this._autoRefAnimationComponentAsset(component, delta)
+        } else if (component instanceof sp.Skeleton) {
+            this._autoRefAsset(component.skeletonData, delta)
+        } else if (component instanceof dragonBones.ArmatureDisplay) {
+            this._autoRefAsset(component.dragonAsset, delta)
+            this._autoRefAsset(component.dragonAtlasAsset, delta)
+        } else if (component instanceof SlowlyRef) {
+            //循环遍历所有属性是有一定性能负担 可以根据项目实行更严苛得管理
+            for (let property in component) {
+                //跳过setter getter
+                let descriptor = Object.getOwnPropertyDescriptor(component, property)
+                if (!descriptor) {
+                    continue
+                }
+                let value = component[property]
+                if (Array.isArray(value)) {
+                    this._checkArray(value, delta)
+                } else if (value instanceof Map) {
+                    this._checkMap(value, delta)
+                } else if (this._checkProperty(value, delta)) {
+                    continue
+                }
             }
         }
+
+        // //所有组件全部暴力轮询(最初版本)
+        // for (let property in component) {
+        //     //跳过setter getter
+        //     let descriptor = Object.getOwnPropertyDescriptor(component, property)
+        //     if (!descriptor) {
+        //         continue
+        //     }
+        //     let value = component[property]
+        //     if (Array.isArray(value)) {
+        //         this._checkArray(value, delta)
+        //     } else if (value instanceof Map) {
+        //         this._checkMap(value, delta)
+        //     } else if (this._checkProperty(value, delta)) {
+        //         continue
+        //     }
+        // }
     }
 
-    private _checkProperty(value: any, component, delta: number) {
+    private _checkProperty(value: any, delta: number) {
         if (value instanceof cc.Asset) {
             if (value instanceof cc.Texture2D) return false
             let asset: cc.Asset = value
@@ -308,10 +429,11 @@ export default class Resource extends cc.Component {
             onLoad(null, bundle)
         })
     }
+
     /** 
-     * 替换字体
+     * 替换SpriteFrame 
      * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口 
-     *      错误示例: label.font = newFont 或者 label.font = null
+     *      错误示例: sprite.spriteFrame = newSpriteFrame 或者 sprite.spriteFrame = null
      */
     public setSpriteFrame(image: cc.Sprite | cc.Mask, newSpriteFrame: cc.SpriteFrame) {
         if (!image) return
@@ -331,6 +453,11 @@ export default class Resource extends cc.Component {
         }
     }
 
+    /** 
+     * 替换字体
+     * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口 
+     *      错误示例: label.font = newFont 或者 label.font = null
+     */
     public setFont(label: cc.Label | cc.RichText, newFont: cc.Font) {
         if (!label) return
         let oldFont = label.font
@@ -341,8 +468,28 @@ export default class Resource extends cc.Component {
             if (newFont)
                 this.addRef(newFont)
         }
-
         label.font = newFont
+    }
+
+    /**
+     * 替换龙骨资源
+     */
+    public setDragonBones(dragonBones: dragonBones.ArmatureDisplay, newDragonBonesAsset: dragonBones.DragonBonesAsset, newDragonBonesAltas: dragonBones.DragonBonesAtlasAsset): void {
+        if (!dragonBones) return
+        let oldDragonBonesAsset = dragonBones.dragonAsset
+        let oldDragonBonesAtlas = dragonBones.dragonAtlasAsset
+        if (oldDragonBonesAsset)
+            this.decRef(oldDragonBonesAsset)
+        if (oldDragonBonesAtlas)
+            this.decRef(oldDragonBonesAtlas)
+
+        if (newDragonBonesAltas)
+            this.addRef(newDragonBonesAltas)
+        if (newDragonBonesAsset)
+            this.addRef(newDragonBonesAsset)
+
+        dragonBones.dragonAsset = newDragonBonesAsset
+        dragonBones.dragonAtlasAsset = newDragonBonesAltas
     }
 
     /** 
@@ -376,13 +523,17 @@ export default class Resource extends cc.Component {
         this.loadAsset(bundleName, materialPath, cc.Material, callback)
     }
 
-    public loadPrefab(bundleName: string, prefabPath: string, callback: (err?: string, prefab?: cc.Prefab) => void) {
+    public loadPrefab(bundleName: string, prefabPath: string, callback?: (err?: string, prefab?: cc.Prefab) => void) {
         this.loadAsset(bundleName, prefabPath, cc.Prefab, callback)
     }
 
-    public loadSpine(bundleName: string, spinePath: string, callback?: (err?: string, spine?: sp.SkeletonData) => void) {
-        this.loadAsset(bundleName, spinePath, sp.SkeletonData, callback)
-    }
+    // public loadSpine(bundleName: string, spinePath: string, callback?: (err?: string, spine?: sp.SkeletonData) => void) {
+    //     this.loadAsset(bundleName, spinePath, sp.SkeletonData, callback)
+    // }
+
+    // public loadDragBones(bundleName: string, dragonBonesPath: string, callback?: (err?: string, dragonBones?: dragonBones.DragonBonesAsset) => void) {
+    //     this.loadAsset(bundleName, dragonBonesPath, dragonBones.DragonBonesAsset, callback)
+    // }
 
     public loadAudioClip(bundleName: string, audioClipPath: string, callback: (err: string, clip: cc.AudioClip) => void) {
         this.loadAsset(bundleName, audioClipPath, cc.AudioClip, callback)
@@ -423,12 +574,19 @@ export default class Resource extends cc.Component {
                 callback && callback(err, null)
                 return
             }
+            // let performance1 = performance.now()
             let oldScene = cc.director.getScene()
             this._autoRefSceneAsset(oldScene, -1)
-
-            cc.director.runScene(sceneAsset, (err, newScene: cc.Scene) => {
+            // let performance2 = performance.now()
+            // let oldSceneDuration = performance2 - performance1
+            // cc.log(`旧场景释放引用计数耗时 ${oldSceneDuration}`)
+            cc.director.runScene(sceneAsset, null, (err, newScene: cc.Scene) => {
                 if (newScene) {
+                    let performance3 = performance.now()
                     this._autoRefSceneAsset(newScene, 1)
+                    let performance4 = performance.now()
+                    let newSceneDuration = performance4 - performance3
+                    // cc.log(`新场景添加引用计数耗时 ${newSceneDuration}`)
                 }
                 callback && callback(err, newScene)
             })
@@ -451,7 +609,7 @@ export default class Resource extends cc.Component {
                     let uuid = info.uuid //cc.assetManager.assets里面存储的key
                     if (uuid) {
                         let cachedAsset = cc.assetManager.assets.get(uuid)
-                        if (cachedAsset) {
+                        if (cachedAsset && cc.isValid(cachedAsset)) {
                             callback && callback(null, cachedAsset)
                             return
                         }
