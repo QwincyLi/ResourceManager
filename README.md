@@ -68,6 +68,10 @@ setFont(label: cc.Label | cc.RichText, newFont: cc.Font)
  */
 setMaterial(render: cc.RenderComponent, index: number, newMaterial: cc.Material) 
 /**
+ * 替换按钮状态纹理
+ */
+setButtonSpriteFrame(button: cc.Button, newNormalSpriteFrame: cc.SpriteFrame, newPressedSpriteFrame: cc.SpriteFrame, newHoverSpriteFrame: cc.SpriteFrame, newDisableSpriteFrame: cc.SpriteFrame)
+/**
  * 替换龙骨资源
  */
 setDragonBones(dragonBones: dragonBones.ArmatureDisplay, newDragonBonesAsset: dragonBones.DragonBonesAsset, newDragonBonesAltas: dragonBones.DragonBonesAtlasAsset)
