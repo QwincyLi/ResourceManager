@@ -3,12 +3,7 @@ import SlowlyRef from "./SlowlyRef";
 const { ccclass, property, menu } = cc._decorator;
 
 /**
- * 资源管理模块
- * 
- * 1.预加载: 直接使用引擎接口即可
- * 2.资源常驻: 在加载完成得回调中调用本模块的addRef接口(非引擎自带的资源addRef)
- * 3.测试demo: https://github.com/QinSheng-Li/ResourceDemo
- * TODO : 遍历所有组件及其属性的方式优化
+ * 资源自动引用计数管理模块
  */
 @ccclass
 export default class Resource extends cc.Component {
@@ -123,8 +118,8 @@ export default class Resource extends cc.Component {
      * @param delta 增加的引用计数量,默认为1
      */
     public addRef(asset: cc.Asset, delta: number = 1) {
-        if (this.autoRef) {
-            this._autoRefAsset(asset, delta)
+        if (this.autoRef && asset) {
+            this._autoRefAnyAsset(asset, delta)
         }
     }
 
@@ -135,34 +130,60 @@ export default class Resource extends cc.Component {
      */
     public decRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef && asset) {
-            this._autoRefAsset(asset, -1 * delta)
+            this._autoRefAnyAsset(asset, -1 * delta)
         }
     }
 
-    private _autoRefAsset(asset: cc.Asset, delta) {
+    private _autoRefAnyAsset(asset: cc.Asset, delta) {
         if (!asset) return
         if (delta == 0) return
 
         //材质特殊处理
         if (asset instanceof cc.Material) {
-            //@ts-expect-error
-            let material = asset instanceof cc.MaterialVariant ? asset.material : asset
-            //内置材质 跳过(内置材质引用计数减为0其实也没释放掉)
-            if (cc.assetManager.builtins.getBuiltin("material", material.name)) {
-                return
-            } else {
-                //对材质变体增减引用计数其实就是对材质本身操作
-                asset = material
-            }
-            this._autoRef(asset, delta)
-            return
+            this._autoRefMaterialAsset(asset, delta)
         } else if (asset instanceof cc.Prefab) { //prefab 增加引用计数的时候 用到的资源都进行了增加 所以需要释放
-            this._autoRefNodeAsset(asset.data, delta)
+            this._autoRefPrefabAsset(asset, delta)
+        } else if (asset instanceof cc.BitmapFont) {
+            this._autoRefFontAsset(asset, delta)
+        } else if (asset instanceof cc.SpriteAtlas) {
+            this._autoRefAtlasAsset(asset, delta)
+        } else {
             this._autoRef(asset, delta)
-            return
+            this._autoRefSubAsset(asset, delta)
         }
-        this._autoRef(asset, delta)
-        this._autoRefSubAsset(asset, delta)
+    }
+
+    private _autoRefPrefabAsset(prefab: cc.Prefab, delta) {
+        this._autoRefNodeAsset(prefab.data, delta)
+        this._autoRef(prefab, delta)
+    }
+
+    private _autoRefMaterialAsset(materialOrVariant: cc.Material, delta: number = 1) {
+        //@ts-expect-error
+        let material = materialOrVariant instanceof cc.MaterialVariant ? materialOrVariant.material : materialOrVariant
+        //内置材质 跳过(内置材质引用计数减为0 其实还在使用中也没释放掉)
+        if (cc.assetManager.builtins.getBuiltin("material", material.name)) {
+            return
+        } else {
+            //对材质变体增减引用计数其实就是对材质本身操作
+        }
+        this._autoRef(material, delta)
+    }
+
+    private _autoRefFontAsset(font: cc.Font, delta) {
+        this._autoRef(font, delta)
+        if (font instanceof cc.BitmapFont) {
+            //@ts-expect-error
+            this._autoRef(font.spriteFrame, font.refCount - (font.spriteFrame as cc.SpriteFrame).refCount)
+        }
+    }
+
+    private _autoRefAtlasAsset(atlas: cc.SpriteAtlas, delta) {
+        atlas.addRef()
+        let sprites = atlas.getSpriteFrames()
+        for (let i = 0; i < sprites.length; i++) {
+            this._autoRef(sprites[i], atlas.refCount - sprites[i].refCount)
+        }
     }
 
     /**
@@ -171,15 +192,7 @@ export default class Resource extends cc.Component {
      * @param delta 
      */
     private _autoRefSubAsset(asset: cc.Asset, delta) {
-        if (asset instanceof cc.SpriteAtlas) {
-            let sprites = asset.getSpriteFrames()
-            for (let i = 0; i < sprites.length; i++) {
-                this._autoRef(sprites[i], asset.refCount - sprites[i].refCount)
-            }
-        } else if (asset instanceof cc.BitmapFont) {
-            //@ts-expect-error
-            this._autoRef(asset.spriteFrame, asset.refCount - (asset.spriteFrame as cc.SpriteFrame).refCount)
-        }
+
         // else if (asset instanceof cc.Material) {
         //     let effectAsset = asset.effectAsset
         //     if (effectAsset) {
@@ -188,7 +201,7 @@ export default class Resource extends cc.Component {
         // }
     }
 
-    _autoRef(asset: cc.Asset, delta) {
+    private _autoRef(asset: cc.Asset, delta) {
         if (delta > 0) {
             // if (asset.refCount <= 0 && CC_PREVIEW)
             //     cc.log(asset.name + " 将被自动引用管理")
@@ -245,7 +258,7 @@ export default class Resource extends cc.Component {
         for (let j = 0; j < materialList.length; j++) {
             let material = materialList[j]
             if (material) {
-                this._autoRefAsset(material, delta)
+                this._autoRefMaterialAsset(material, delta)
             }
         }
     }
@@ -253,7 +266,7 @@ export default class Resource extends cc.Component {
     private _autoRefAnimationComponentAsset(animation: cc.Animation, delta) {
         let clips = animation.getClips()
         for (let i = 0; i < clips.length; i++) {
-            this._autoRefAsset(clips[i], delta)
+            this._autoRef(clips[i], delta)
         }
     }
 
@@ -288,50 +301,47 @@ export default class Resource extends cc.Component {
             let sprite = component
             if (sprite) {
                 if (sprite.spriteFrame) {
-                    this._autoRefAsset(sprite.spriteFrame, delta)
+                    this._autoRef(sprite.spriteFrame, delta)
                 }
                 this._autoRefRenderComponentAsset(sprite, delta)
             }
         } else if (component instanceof cc.Button) {//按钮
-
             let button = component
             if (button.normalSprite) {
-                this._autoRefAsset(button.normalSprite, delta)
+                this._autoRef(button.normalSprite, delta)
             }
             if (button.pressedSprite) {
-                this._autoRefAsset(button.normalSprite, delta)
+                this._autoRef(button.normalSprite, delta)
             }
             if (button.hoverSprite) {
-                this._autoRefAsset(button.hoverSprite, delta)
+                this._autoRef(button.hoverSprite, delta)
             }
             if (button.disabledSprite) {
-                this._autoRefAsset(button.disabledSprite, delta)
+                this._autoRef(button.disabledSprite, delta)
             }
         } else if (component instanceof cc.Label) {
-
-            let label = component
-            if (label.font)
-                this._autoRefAsset(label.font, delta)
-            this._autoRefRenderComponentAsset(label, delta)
+            if (component.font)
+                this._autoRefFontAsset(component.font, delta)
+            this._autoRefRenderComponentAsset(component, delta)
         } else if (component instanceof cc.RichText) {
             let richText = component
             if (richText) {
                 if (richText.font)
-                    this._autoRefAsset(richText.font, delta)
+                    this._autoRefAnyAsset(richText.font, delta)
                 if (richText.imageAtlas) {
-                    this._autoRefAsset(richText.imageAtlas, delta)
+                    this._autoRefAtlasAsset(richText.imageAtlas, delta)
                 }
             }
         } else if (component instanceof cc.ParticleSystem) {
             if (component.file) {
-                this._autoRefSubAsset(component.file, delta)
+                this._autoRef(component.file, delta)
             }
             if (component.spriteFrame) {
-                this._autoRefAsset(component.spriteFrame, delta)
+                this._autoRef(component.spriteFrame, delta)
             }
         } else if (component instanceof cc.PageViewIndicator) {
             if (component.spriteFrame) {
-                this._autoRefAsset(component.spriteFrame, delta)
+                this._autoRef(component.spriteFrame, delta)
             }
             // //新版本已经将输入框背景解耦出来成一个独立节点了 如果是旧版本或者cc.EditBox的引用出现问题则放开此注释
             // } else if (component instanceof cc.EditBox) {
@@ -340,14 +350,15 @@ export default class Resource extends cc.Component {
             //         this._autoRefAsset(editBox.backgroundImage, delta)
             //     }
         } else if (component instanceof cc.Mask) {
-            if (component.spriteFrame) { this._autoRefAsset(component.spriteFrame, delta) }
+            if (component.spriteFrame) { this._autoRef(component.spriteFrame, delta) }
         } else if (component instanceof cc.Animation) {
             this._autoRefAnimationComponentAsset(component, delta)
-        } else if (component instanceof sp.Skeleton) {
-            this._autoRefAsset(component.skeletonData, delta)
-        } else if (component instanceof dragonBones.ArmatureDisplay) {
-            this._autoRefAsset(component.dragonAsset, delta)
-            this._autoRefAsset(component.dragonAtlasAsset, delta)
+        } else if (window["sp"] && component instanceof sp.Skeleton) { //可能会被模块剔除
+            this._autoRef(component.skeletonData, delta)
+            this._autoRefRenderComponentAsset(component, delta)
+        } else if (window["dragonBones"] && component instanceof dragonBones.ArmatureDisplay) { //可能会被模块剔除
+            this._autoRef(component.dragonAsset, delta)
+            this._autoRef(component.dragonAtlasAsset, delta)
         } else {
             //自定义脚本部分
             this._autoCustomComponentAsset(component, delta)
@@ -375,7 +386,7 @@ export default class Resource extends cc.Component {
         if (value instanceof cc.Asset) {
             if (value instanceof cc.Texture2D) return false
             let asset: cc.Asset = value
-            this._autoRefAsset(asset, delta)
+            this._autoRefAnyAsset(asset, delta)
             return true
         }
         return false
@@ -387,7 +398,7 @@ export default class Resource extends cc.Component {
             if (data instanceof cc.Asset) {
                 if (data instanceof cc.Texture2D) continue
                 let asset: cc.Asset = data
-                this._autoRefAsset(asset, delta)
+                this._autoRefAnyAsset(asset, delta)
             }
         }
     }
@@ -395,10 +406,10 @@ export default class Resource extends cc.Component {
     private _checkMap(map: Map<any, any>, delta: number) {
         map.forEach((value, key) => {
             if (value instanceof cc.Asset && !(value instanceof cc.Texture2D)) {
-                this._autoRefAsset(value, delta)
+                this._autoRefAnyAsset(value, delta)
             }
             if (key instanceof cc.Asset && !(key instanceof cc.Texture2D)) {
-                this._autoRefAsset(key, delta)
+                this._autoRefAnyAsset(key, delta)
             }
         })
     }
@@ -628,10 +639,10 @@ export default class Resource extends cc.Component {
             // cc.log(`旧场景释放引用计数耗时 ${oldSceneDuration}`)
             cc.director.runScene(sceneAsset, null, (err, newScene: cc.Scene) => {
                 if (newScene) {
-                    let performance3 = performance.now()
-                    this._autoRefSceneAsset(newScene, 1)
-                    let performance4 = performance.now()
-                    let newSceneDuration = performance4 - performance3
+                    //let performance3 = performance.now()
+                    //this._autoRefSceneAsset(newScene, 1) //新场景资源在加载后会被引擎引用计数+1 所以不需要手动再+1
+                    //let performance4 = performance.now()
+                    //let newSceneDuration = performance4 - performance3
                     // cc.log(`新场景添加引用计数耗时 ${newSceneDuration}`)
                 }
                 callback && callback(err, newScene)
