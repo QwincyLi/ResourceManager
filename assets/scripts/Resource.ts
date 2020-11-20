@@ -617,34 +617,23 @@ export default class Resource extends cc.Component {
     // }
 
     /**
-     * 与引擎接口含义一致,加载并运行场景(建议不勾选场景的资源自动释放)
+     * 与引擎接口含义一致
      */
     public loadScene(sceneName: string, callback?: (err: string, scene: cc.Scene) => void) {
         //@ts-expect-error
         let bundleOfScene = cc.assetManager.bundles.find(function (bundle) {
             return bundle.getSceneInfo(sceneName);
         });
-        cc.assetManager.loadAny({ 'scene': sceneName }, { preset: "scene", bundle: bundleOfScene.name }, (err, sceneAsset) => {
+        cc.assetManager.loadAny({ 'scene': sceneName }, { preset: "scene", bundle: bundleOfScene.name }, (finished, total, item) => {
+            cc.log(item)
+        }, (err, sceneAsset) => {
             if (err) {
                 cc.warn(err)
                 //@ts-expect-error
                 callback && callback(err, null)
                 return
             }
-            // let performance1 = performance.now()
-            let oldScene = cc.director.getScene()
-            this._autoRefSceneAsset(oldScene, -1)
-            // let performance2 = performance.now()
-            // let oldSceneDuration = performance2 - performance1
-            // cc.log(`旧场景释放引用计数耗时 ${oldSceneDuration}`)
             cc.director.runScene(sceneAsset, null, (err, newScene: cc.Scene) => {
-                if (newScene) {
-                    //let performance3 = performance.now()
-                    //this._autoRefSceneAsset(newScene, 1) //新场景资源在加载后会被引擎引用计数+1 所以不需要手动再+1
-                    //let performance4 = performance.now()
-                    //let newSceneDuration = performance4 - performance3
-                    // cc.log(`新场景添加引用计数耗时 ${newSceneDuration}`)
-                }
                 callback && callback(err, newScene)
             })
         })

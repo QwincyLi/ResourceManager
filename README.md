@@ -1,8 +1,9 @@
-## cocos creator 资源管理demo(通过资源自动引用计数,自动释放 持续迭代中)
+## cocos creator 资源管理demo(通过资源自动引用计数,自动释放)
 ## asset(resource) auto release demo for cocos creator
 ### cocos creator version : 2.4.3+
 ---
-
+一个cocos creator资源管理方案,将引擎的(资源的静态引用)[https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E9%9D%99%E6%80%81%E5%BC%95%E7%94%A8]和(资源的动态引用)[https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E5%8A%A8%E6%80%81%E5%BC%95%E7%94%A8]的资源管理统一,通过引用计数实现资源的自动释放
+---
 ### Resource Demo: https://github.com/QinSheng-Li/ResourceDemo
 ### 项目资源来自 : [cocos-creator/example-cases](https://github.com/cocos-creator/example-cases)
 --- 
@@ -15,7 +16,7 @@
 - 2.预加载: 直接使用引擎接口即可
 - 3.资源常驻: 在加载完成得回调中调用本模块的addRef接口(非引擎自带的资源addRef)
 - 4.资源加载接口与引擎接口的区别: 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步)
-- 5.场景的资源自动释放是否需要勾选: 建议不勾选(若已经采用本套方案,为了避免未知错误,建议不勾选,并且切换场景时请使用Resource下的loadScene接口进行引用管理)
+- 5.场景的资源自动释放是否需要勾选: 勾选(引擎场景资源释放也是通过引用计数减少的方式,所以不再重复实现,如果需要场景切换对某些资源不释放,参考第三点:资源常驻)
 ### API:
 #### 1. 资源引用计数
 ``` typescript
@@ -76,7 +77,7 @@ setButtonSpriteFrame(button: cc.Button, newNormalSpriteFrame: cc.SpriteFrame, ne
  */
 setDragonBones(dragonBones: dragonBones.ArmatureDisplay, newDragonBonesAsset: dragonBones.DragonBonesAsset, newDragonBonesAltas: dragonBones.DragonBonesAtlasAsset)
 ```
-#### 2. 资源加载(与引擎接口的区别是: 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步,如果不需要可以不使用（但loadScene需要使用本模块的进行引用管理)
+#### 2. 资源加载(与引擎接口的区别是: 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步,如果不需要可以不使用
 ``` typescript
 /**
  * 加载bundle 若已缓存则直接同步执行回调
@@ -100,7 +101,7 @@ loadPrefab(bundleName: string, prefabPath: string, callback: (err?: string, pref
 loadAudioClip(bundleName: string, audioClipPath: string, callback: (err: string, clip: cc.AudioClip) => void) 
 loadAnimationClip(bundleName: string, clipPath: string, callback: (err: string, clip: cc.AnimationClip) => void) 
 /**
- * 与引擎接口含义一致,加载并运行场景(建议不勾选场景的资源自动释放)
+ * 与引擎接口含义一致,加载并运行场景
  */
 loadScene(sceneName: string, callback?: (err: string, scene: cc.Scene) => void)
 ```
