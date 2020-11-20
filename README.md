@@ -1,8 +1,8 @@
-## cocos creator 资源管理demo(通过资源自动引用计数,自动释放)
 ## asset(resource) auto release demo for cocos creator
 ### cocos creator version : 2.4.3+
 ---
-一个cocos creator资源管理方案,将引擎的(资源的静态引用)[https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E9%9D%99%E6%80%81%E5%BC%95%E7%94%A8]和(资源的动态引用)[https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E5%8A%A8%E6%80%81%E5%BC%95%E7%94%A8]的资源管理统一,通过引用计数实现资源的自动释放
+一个cocos creator资源自动管理方案和测试demo。将引擎的[资源的静态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E9%9D%99%E6%80%81%E5%BC%95%E7%94%A8)和[资源的动态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E5%8A%A8%E6%80%81%E5%BC%95%E7%94%A8)的资源管理统一,通过引用计数实现资源的自动释放。
+
 ---
 ### Resource Demo: https://github.com/QinSheng-Li/ResourceDemo
 ### 项目资源来自 : [cocos-creator/example-cases](https://github.com/cocos-creator/example-cases)
