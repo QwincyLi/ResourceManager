@@ -1,3 +1,4 @@
+import LightRef from "./LightRef";
 import SlowlyRef from "./SlowlyRef";
 
 const { ccclass, property, menu } = cc._decorator;
@@ -81,7 +82,7 @@ export default class Resource extends cc.Component {
     }
 
     /**
-     * 销毁一个节点,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的addRef方法
+     * 销毁一个节点,为了保证资源被正确引用计数，请使用此接口代替cc.Node的destroy方法
      * @param node 
      */
     public destroyNode(node: cc.Node) {
@@ -124,7 +125,7 @@ export default class Resource extends cc.Component {
     }
 
     /**
-     * 给资源减少引用计数,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的addRef方法
+     * 给资源减少引用计数,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的decRef方法
      * @param asset 
      * @param delta 减少的引用计数量,默认为1
      */
