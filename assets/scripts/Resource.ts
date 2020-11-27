@@ -585,9 +585,13 @@ export default class Resource extends cc.Component {
         this.loadAsset(bundleName, prefabPath, cc.Prefab, callback)
     }
 
-    // public loadSpine(bundleName: string, spinePath: string, callback?: (err?: string, spine?: sp.SkeletonData) => void) {
-    //     this.loadAsset(bundleName, spinePath, sp.SkeletonData, callback)
-    // }
+    public loadAtlas(bundleName: string, atlasPath: string, callback?: (err?: string, atlas?: cc.SpriteAtlas) => void) {
+        this.loadAsset(bundleName, atlasPath, cc.SpriteAtlas, callback)
+    }
+
+    public loadSpine(bundleName: string, spinePath: string, callback?: (err?: string, spine?: sp.SkeletonData) => void) {
+        this.loadAsset(bundleName, spinePath, sp.SkeletonData, callback)
+    }
 
     // public loadDragBones(bundleName: string, dragonBonesPath: string, callback?: (err?: string, dragonBones?: dragonBones.DragonBonesAsset) => void) {
     //     this.loadAsset(bundleName, dragonBonesPath, dragonBones.DragonBonesAsset, callback)
