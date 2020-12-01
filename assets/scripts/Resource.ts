@@ -1,4 +1,3 @@
-import LightRef from "./LightRef";
 import SlowlyRef from "./SlowlyRef";
 
 const { ccclass, property, menu } = cc._decorator;
@@ -312,7 +311,7 @@ export default class Resource extends cc.Component {
                 this._autoRef(button.normalSprite, delta)
             }
             if (button.pressedSprite) {
-                this._autoRef(button.normalSprite, delta)
+                this._autoRef(button.pressedSprite, delta)
             }
             if (button.hoverSprite) {
                 this._autoRef(button.hoverSprite, delta)
