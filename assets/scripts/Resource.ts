@@ -147,6 +147,8 @@ export default class Resource extends cc.Component {
             this._autoRefFontAsset(asset, delta)
         } else if (asset instanceof cc.SpriteAtlas) {
             this._autoRefAtlasAsset(asset, delta)
+        } else if (asset instanceof cc.AnimationClip) {
+            this._autoRefAnimationClipAsset(asset, delta)
         } else {
             this._autoRef(asset, delta)
             this._autoRefSubAsset(asset, delta)
@@ -183,6 +185,16 @@ export default class Resource extends cc.Component {
         let sprites = atlas.getSpriteFrames()
         for (let i = 0; i < sprites.length; i++) {
             this._autoRef(sprites[i], atlas.refCount - sprites[i].refCount)
+        }
+    }
+
+    private _autoRefAnimationClipAsset(animationClip: cc.AnimationClip, delta) {
+        this._autoRef(animationClip, delta)
+        let deps = cc.assetManager.dependUtil.getDepsRecursively((animationClip as any)._uuid)
+        for (let j = 0; j < deps.length; j++) {
+            let asset = cc.assetManager.assets.get(deps[j])
+            if (asset && !(asset instanceof cc.Texture2D))
+                this._autoRef(asset, delta)
         }
     }
 
@@ -266,7 +278,8 @@ export default class Resource extends cc.Component {
     private _autoRefAnimationComponentAsset(animation: cc.Animation, delta) {
         let clips = animation.getClips()
         for (let i = 0; i < clips.length; i++) {
-            this._autoRef(clips[i], delta)
+            let clip = clips[i]
+            this._autoRefAnimationClipAsset(clip, delta)
         }
     }
 
