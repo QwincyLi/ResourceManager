@@ -393,22 +393,22 @@ export default class ResourceComponent extends cc.Component {
         let oldDisableSpriteFrame = button.disabledSprite
 
         if (oldNormalSpriteFrame)
-            this.decRef(oldNormalSpriteFrame, -1)
+            this.decRef(oldNormalSpriteFrame)
         if (oldPressedSpriteFrame)
-            this.decRef(oldPressedSpriteFrame, -1)
+            this.decRef(oldPressedSpriteFrame)
         if (oldHoverSpriteFrame)
-            this.decRef(oldHoverSpriteFrame, -1)
+            this.decRef(oldHoverSpriteFrame)
         if (oldDisableSpriteFrame)
-            this.decRef(oldDisableSpriteFrame, -1)
+            this.decRef(oldDisableSpriteFrame)
 
         if (newNormalSpriteFrame)
-            this.addRef(newNormalSpriteFrame, 1)
+            this.addRef(newNormalSpriteFrame)
         if (newPressedSpriteFrame)
-            this.addRef(newPressedSpriteFrame, 1)
+            this.addRef(newPressedSpriteFrame)
         if (newHoverSpriteFrame)
-            this.addRef(newHoverSpriteFrame, 1)
+            this.addRef(newHoverSpriteFrame)
         if (newDisableSpriteFrame)
-            this.addRef(newDisableSpriteFrame, 1)
+            this.addRef(newDisableSpriteFrame)
 
         button.normalSprite = newNormalSpriteFrame
         button.pressedSprite = newPressedSpriteFrame
