@@ -1,101 +1,235 @@
-import SlowlyRef from "./SlowlyRef";
-
 const { ccclass, property, menu } = cc._decorator;
 
-/**
- * 资源自动引用计数管理模块
- */
-@ccclass
-export default class Resource extends cc.Component {
+const dependUtil = cc.assetManager.dependUtil
+const assets = cc.assetManager.assets
 
-    @property({ tooltip: "游戏运行后不可再修改" })
+@ccclass
+@menu("GameEntry/Builtins/ResourceComponent")
+export default class ResourceComponent extends cc.Component {
+
+    @property({ tooltip: "是否启动自动引用计数管理, 游戏运行时不可以再修改" })
     public autoRef: boolean = true
 
-    public onLoad() {
-        // cc.assetManager.assets.forEach((asset: cc.Asset, url) => {
-        //     this.addRef(asset)
-        // })
+    @property({ tooltip: "资源释放延迟间隔,引用计数归0后多久释放资源", type: cc.Float, min: 0.0 })
+    public releaseDelay: number = 5.0
+
+    _waitDelete: Map<string, number> = new Map()
+
+    onLoad() {
+        //循环进行资源检测
+        if (this.autoRef) {
+            //引擎内置资源常驻
+            assets.forEach((asset, uuid) => { asset.addRef() })
+
+            this.schedule(() => {
+                let now = performance.now()
+                if (this._waitDelete.size) {
+
+                    this._waitDelete.forEach((deleteTick, uuid) => {
+                        //超过时间进行删除检测
+                        if (now >= deleteTick) {
+                            let asset = assets.get(uuid)
+                            if (asset) {
+                                //@ts-expect-error
+                                cc.assetManager._releaseManager._free(asset)
+                                //cc.log(`try release asset : ${asset.name} ${cc.js.getClassName(asset)} ${uuid} , refCount : ${asset.refCount}`)
+                            }
+                            this._waitDelete.delete(uuid)
+                        }
+                    })
+                }
+            }, this.releaseDelay / 2.0)
+        }
+    }
+
+    visitAsset(asset: cc.Asset, deps: string[]) {
+        // Skip assets generated programmatically or by user (e.g. label texture)
+        //@ts-expect-error
+        if (!asset._uuid) {
+            return;
+        }
+
+        //@ts-expect-error
+        if (!deps.includes(asset._uuid)) {
+            //@ts-expect-error
+            let subDeps = dependUtil.getDepsRecursively(asset._uuid)
+            //@ts-expect-error
+            deps.push(asset._uuid)
+            for (let i = 0; i < subDeps.length; i++) {
+                let subUuid = subDeps[i]
+                if (!deps.includes(subUuid)) {
+                    deps.push(subDeps[i])
+                }
+            }
+        }
+    }
+
+    visitComponent(comp, deps) {
+        var props = Object.getOwnPropertyNames(comp);
+        for (let i = 0; i < props.length; i++) {
+            var propName = props[i];
+            if (propName === 'node' || propName === '__eventTargets') continue;
+            var value = comp[propName];
+            if (typeof value === 'object' && value) {
+                if (Array.isArray(value)) {
+                    for (let j = 0; j < value.length; j++) {
+                        let val = value[j];
+                        if (val instanceof cc.Asset) {
+                            this.visitAsset(val, deps);
+                        }
+                    }
+                }
+                else if (!value.constructor || value.constructor === Object) {
+                    let keys = Object.getOwnPropertyNames(value);
+                    for (let j = 0; j < keys.length; j++) {
+                        let val = value[keys[j]];
+                        if (val instanceof cc.Asset) {
+                            this.visitAsset(val, deps);
+                        }
+                    }
+                }
+                else if (value instanceof cc.Asset) {
+                    this.visitAsset(value, deps);
+                }
+            }
+        }
+    }
+
+    visitNode(node, deps) {
+        for (let i = 0; i < node._components.length; i++) {
+            this.visitComponent(node._components[i], deps);
+        }
+        for (let i = 0; i < node._children.length; i++) {
+            this.visitNode(node._children[i], deps);
+        }
+    }
+
+    /**
+     * 尝试删除(将其放入待删除容器中,真正得删除在定时器中调用)
+     */
+    tryRelease(uuid: string) {
+        let deleteTimeStamp = performance.now() + this.releaseDelay * 1000
+        this._waitDelete.set(uuid, deleteTimeStamp)
+    }
+
+    addNodeDependAssetsRef(node: cc.Node, delta: number = 1) {
+        let deps = [];
+        this.visitNode(node, deps);
+        for (let i = 0, l = deps.length; i < l; i++) {
+            let dependAsset = assets.get(deps[i]);
+            if (dependAsset) {
+                this.addRef(dependAsset, delta)
+            }
+        }
+    }
+
+    decNodeDependAssetsRef(node: cc.Node, delta: number = 1) {
+        let deps = []
+        this.visitNode(node, deps)
+        for (let i = 0, l = deps.length; i < l; i++) {
+            var dependAsset = assets.get(deps[i]);
+            if (dependAsset) {
+                //这里已经遍历获取到了间接依赖的资源了 所以不需要再调用decRef接口而是直接减少
+                //@ts-expect-error
+                dependAsset._ref -= delta
+                //@ts-expect-error
+                this.tryRelease(dependAsset._uuid)
+                //this.decRef(dependAsset, delta)
+            } else {
+                cc.warn(`Resource : node dec asset , ${node.name} not fount depend asset ${deps[i]}`)
+            }
+        }
     }
 
     /**
      * 实例化一个预制或者节点,为了保证资源被正确引用计数，请使用此接口代替cc.instantiate
-     * @param prefabOrNode 
+     * @param prefabOrNode
      */
     public instantiateNode(prefabOrNode: cc.Prefab | cc.Node): cc.Node {
-        if (!prefabOrNode) return null
+
         // let performance1 = performance.now()
-        if (this.autoRef && prefabOrNode instanceof cc.Prefab) {
-            //预制资源添加引用(如果单次创建 实例化后不需要保留预制资源的引用的话 则需要调用decRef 将预制手动释放掉)
-            this.addRef(prefabOrNode)
-        }
-        // let performance2 = performance.now()
         let node = cc.instantiate(prefabOrNode as cc.Node)
-        // let performance3 = performance.now()
+        // let performance2 = performance.now()
         if (this.autoRef) {
+            if (prefabOrNode instanceof cc.Prefab) {
+                //预制资源添加引用(如果单次创建 实例化后不需要保留预制资源的引用的话 则需要调用decRef 将预制手动释放掉)
+                // let performance3 = performance.now()
+                this.addRef(prefabOrNode) //在引擎内部：资源减少引用计数的时候会对所有它的直接依赖减少引用计数
+                // let performance4 = performance.now()
+
+                // let engineDuration = performance2 - performance1
+                // let refDuration = performance4 - performance3
+                // cc.log(`${prefabOrNode.name} 引擎实例化耗时 ${engineDuration}`)
+                // cc.log(`${prefabOrNode.name} 引用计数实例化耗时 ${refDuration}`)
+            } else {
+                //实例节点引用计数添加
+                //cc.warn("TODO : " + prefabOrNode.name + " addRefRecursively...")
+                this.addNodeDependAssetsRef(prefabOrNode)
+            }
+
+            //标注节点预制来源 
             // @ts-expect-error
             if (prefabOrNode._uuid) {
                 //hack 标记资源的预制来源
                 //@ts-expect-error
                 node._uuid = prefabOrNode._uuid
             }
-            this._autoRefNodeAsset(node)
         }
-        // let performance4 = performance.now()
-        // let engineDuration = performance3 - performance2
-        // let totalDuration = performance4 - performance1
-        // let resourceDuration = totalDuration - engineDuration
-        // cc.log(`${prefabOrNode.name} 引擎实例化耗时 ${engineDuration}`)
-        // cc.log(`${prefabOrNode.name} Resource实例化耗时 ${resourceDuration}`)
-        // cc.log(`${prefabOrNode.name} 总共实例化耗时 ${totalDuration}`)
         return node
     }
 
     /**
      * 实例化多个对象(自动引用计数时会遍历所有组件,为了减少消耗,需要实例化多个时建议使用此接口)
-     * @param prefabOrNode 
-     * @param count 
+     * @param prefabOrNode
+     * @param count
      */
     public instantiateNodeMultip(prefabOrNode: cc.Prefab | cc.Node, count: number = 1): cc.Node[] {
-        if (!prefabOrNode) return null
-        let isPrefab = prefabOrNode instanceof cc.Prefab
-        if (this.autoRef && isPrefab) {
-            //预制添加引用
-            this.addRef(prefabOrNode as cc.Prefab, count)
-        }
+
         let nodeList = []
         for (let i = 0; i < count; i++) {
             let node = cc.instantiate(prefabOrNode as cc.Node)
-            nodeList.push(node)
-        }
-
-        if (this.autoRef) {
+            //标注节点预制来源 
             // @ts-expect-error
             if (prefabOrNode._uuid) {
                 //hack 标记资源的预制来源
                 //@ts-expect-error
                 node._uuid = prefabOrNode._uuid
             }
-            this._autoRefNodeAsset(isPrefab ? (prefabOrNode as cc.Prefab).data : (prefabOrNode as cc.Node), count)
+            nodeList.push(node)
+        }
+
+        if (this.autoRef) {
+            if (prefabOrNode instanceof cc.Prefab) {
+                //预制资源添加引用(如果单次创建 实例化后不需要保留预制资源的引用的话 则需要调用decRef 将预制手动释放掉
+                this.addRef(prefabOrNode, count)
+            } else {
+                //实例节点引用计数添加
+                //cc.warn("TODO : " + prefabOrNode.name + " addRefRecursively...")
+                this.addNodeDependAssetsRef(prefabOrNode, count)
+            }
         }
         return nodeList
     }
 
     /**
      * 销毁一个节点,为了保证资源被正确引用计数，请使用此接口代替cc.Node的destroy方法
-     * @param node 
+     * @param node
      */
     public destroyNode(node: cc.Node) {
         if (node && cc.isValid(node)) {
             if (this.autoRef) {
-                this._autoRefNodeAsset(node, -1)
+                this.decNodeDependAssetsRef(node)
                 //hack 根据标记的预}制来源 减少预制的引用
                 //@ts-expect-error
                 if (node._uuid) {
-                    //实例化预制减少引用
+                    //预制减少引用(这里不递归减少依赖得资源,因为预制里得资源属性可能被修改了)
                     //@ts-expect-error
                     let prefab = cc.assetManager.assets.get(node._uuid) as cc.Prefab
                     if (prefab) {
-                        this.decRef(prefab)
+                        //@ts-expect-error
+                        prefab._ref -= 1
+                        //@ts-expect-error
+                        this.tryRelease(prefab._uuid)
                     }
                 }
             }
@@ -114,323 +248,82 @@ export default class Resource extends cc.Component {
 
     /**
      * 给资源增加引用计数,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的addRef方法
-     * @param asset 
+     * @param asset
      * @param delta 增加的引用计数量,默认为1
      */
     public addRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef && asset) {
-            this._autoRefAnyAsset(asset, delta)
+
+            if (!cc.isValid(asset, true)) {
+                cc.warn(`Resource : asset addRef ${asset.name} not valid, addRef failuer`)
+                return
+            }
+            //cc.log("addRef : " + asset.name)
+            let depUuid = dependUtil.getDepsRecursively((asset as any)._uuid)
+            for (let i = 0; i < depUuid.length; i++) {
+                let depAsset = assets.get(depUuid[i])
+                if (depAsset) {
+                    if (depAsset instanceof cc.MaterialVariant) {
+                        //@ts-expect-error
+                        depAsset = depAsset.material
+                    }
+                    //@ts-expect-error
+                    depAsset._ref += delta
+                    //cc.log(`add Dependent Asset Ref : ${depAsset.name} ${cc.js.getClassName(depAsset)} , refCount : ${depAsset.refCount}`)
+                } else {
+                    cc.warn(`Resource : asset addRef ${asset.name} ${cc.js.getClassName(asset)} not fount depend asset ${depUuid[i]}`)
+                }
+            }
+            if (asset instanceof cc.MaterialVariant) {
+                //@ts-expect-error
+                asset = asset.material
+            }
+            //@ts-expect-error
+            asset._ref += delta
+            // cc.log("addRef : " + asset.name + " " + cc.js.getClassName(asset) + " , refCount : " + asset.refCount)
+            //cc.log("--------------------------------------------------------")
         }
     }
 
     /**
      * 给资源减少引用计数,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的decRef方法
-     * @param asset 
+     * @param asset
      * @param delta 减少的引用计数量,默认为1
      */
     public decRef(asset: cc.Asset, delta: number = 1) {
         if (this.autoRef && asset) {
-            this._autoRefAnyAsset(asset, -1 * delta)
-        }
-    }
 
-    private _autoRefAnyAsset(asset: cc.Asset, delta) {
-        if (!asset) return
-        if (delta == 0) return
+            let depUuid = dependUtil.getDepsRecursively((asset as any)._uuid)
+            for (let i = 0; i < depUuid.length; i++) {
+                let depAsset = assets.get(depUuid[i])
+                if (depAsset) {
+                    //@ts-expect-error
+                    depAsset._ref -= delta
+                    if (depAsset.refCount <= 0) {
+                        //@ts-expect-error
+                        this.tryRelease(depAsset._uuid)
+                    }
+                } else {
+                    cc.warn(`asset decRef : ${asset.name} ${cc.js.getClassName(asset)} not fount depend asset ${depUuid[i]}`)
+                }
+            }
 
-        //材质特殊处理
-        if (asset instanceof cc.Material) {
-            this._autoRefMaterialAsset(asset, delta)
-        } else if (asset instanceof cc.Prefab) { //prefab 增加引用计数的时候 用到的资源都进行了增加 所以需要释放
-            this._autoRefPrefabAsset(asset, delta)
-        } else if (asset instanceof cc.BitmapFont) {
-            this._autoRefFontAsset(asset, delta)
-        } else if (asset instanceof cc.SpriteAtlas) {
-            this._autoRefAtlasAsset(asset, delta)
-        } else if (asset instanceof cc.AnimationClip) {
-            this._autoRefAnimationClipAsset(asset, delta)
-        } else {
-            this._autoRef(asset, delta)
-            this._autoRefSubAsset(asset, delta)
-        }
-    }
-
-    private _autoRefPrefabAsset(prefab: cc.Prefab, delta) {
-        this._autoRefNodeAsset(prefab.data, delta)
-        this._autoRef(prefab, delta)
-    }
-
-    private _autoRefMaterialAsset(materialOrVariant: cc.Material, delta: number = 1) {
-        //@ts-expect-error
-        let material = materialOrVariant instanceof cc.MaterialVariant ? materialOrVariant.material : materialOrVariant
-        //内置材质 跳过(内置材质引用计数减为0 其实还在使用中也没释放掉)
-        if (cc.assetManager.builtins.getBuiltin("material", material.name)) {
-            return
-        } else {
-            //对材质变体增减引用计数其实就是对材质本身操作
-        }
-        this._autoRef(material, delta)
-    }
-
-    private _autoRefFontAsset(font: cc.Font, delta) {
-        this._autoRef(font, delta)
-        if (font instanceof cc.BitmapFont) {
             //@ts-expect-error
-            this._autoRef(font.spriteFrame, font.refCount - (font.spriteFrame as cc.SpriteFrame).refCount)
-        }
-    }
+            asset._ref -= delta
+            cc.log("decRef : " + asset.name + " " + cc.js.getClassName(asset) + " , refCount : " + asset.refCount)
 
-    private _autoRefAtlasAsset(atlas: cc.SpriteAtlas, delta) {
-        atlas.addRef()
-        let sprites = atlas.getSpriteFrames()
-        for (let i = 0; i < sprites.length; i++) {
-            this._autoRef(sprites[i], atlas.refCount - sprites[i].refCount)
-        }
-    }
-
-    private _autoRefAnimationClipAsset(animationClip: cc.AnimationClip, delta) {
-        this._autoRef(animationClip, delta)
-        let deps = cc.assetManager.dependUtil.getDepsRecursively((animationClip as any)._uuid)
-        for (let j = 0; j < deps.length; j++) {
-            let asset = cc.assetManager.assets.get(deps[j])
-            if (asset && !(asset instanceof cc.Texture2D))
-                this._autoRef(asset, delta)
-        }
-    }
-
-    /**
-     * 处理子资源引用计数 引擎层面的处理会使得子资源数量+1
-     * @param asset 
-     * @param delta 
-     */
-    private _autoRefSubAsset(asset: cc.Asset, delta) {
-
-        // else if (asset instanceof cc.Material) {
-        //     let effectAsset = asset.effectAsset
-        //     if (effectAsset) {
-        //         this._autoRefAsset(effectAsset, -1 * delta)
-        //     }
-        // }
-    }
-
-    private _autoRef(asset: cc.Asset, delta) {
-        if (delta > 0) {
-            // if (asset.refCount <= 0 && CC_PREVIEW)
-            //     cc.log(asset.name + " 将被自动引用管理")
-            for (let i = 0; i < delta; i++) {
-                asset.addRef()
-            }
-        } else if (delta < 0) {
-            for (let i = delta; i < 0; i++) {
-                asset.decRef()
-            }
-            // if (asset.refCount <= 0 && CC_PREVIEW)
-            //     cc.log(asset.name + " 将被释放")
-        }
-    }
-
-    /**
-     * 对场景进行自动引用计数(常驻接口将被跳过)
-     * @param scene 
-     * @param delta 
-     */
-    private _autoRefSceneAsset(scene: cc.Scene, delta: number = 1) {
-        let sceneChildren = scene.children
-        let sceneChildrenCount = scene.childrenCount
-        for (let i = 0; i < sceneChildrenCount; i++) {
-            let node = sceneChildren[i]
-            //非常驻节点才需要
+            //引用计数不为0 可能是循环引用也需要做删除检测
+            //if (asset.refCount <= 0) {
             //@ts-expect-error
-            if (!node._persistNode) {
-                this._autoRefNodeAsset(node, delta)
-            }
+            this.tryRelease(asset._uuid)
+            //}
         }
-        return
-    }
-
-    private _autoRefNodeAsset(node: cc.Node, delta: number = 1) {
-        //子节点
-        let nodeChilren = node.children
-        let nodeChilrenCount = node.childrenCount
-        for (let i = 0; i < nodeChilrenCount; i++) {
-            this._autoRefNodeAsset(nodeChilren[i], delta)
-        }
-
-        //组件
-        //@ts-ignore
-        let nodeComponents = node._components as cc.Component[]
-        let nodeComponentCount = nodeComponents.length
-        for (let i = 0; i < nodeComponentCount; i++) {
-            this._autoRefComponentAsset(nodeComponents[i], delta)
-        }
-    }
-
-    private _autoRefRenderComponentAsset(render: cc.RenderComponent, delta) {
-        let materialList = render.getMaterials()
-        for (let j = 0; j < materialList.length; j++) {
-            let material = materialList[j]
-            if (material) {
-                this._autoRefMaterialAsset(material, delta)
-            }
-        }
-    }
-
-    private _autoRefAnimationComponentAsset(animation: cc.Animation, delta) {
-        let clips = animation.getClips()
-        for (let i = 0; i < clips.length; i++) {
-            let clip = clips[i]
-            this._autoRefAnimationClipAsset(clip, delta)
-        }
-    }
-
-    /**
-     * 用户自定义资源属性自动引用计数管理
-     * @param custom 
-     * @param delta 
-     */
-    private _autoCustomComponentAsset(custom: cc.Component, delta) {
-        if (custom instanceof SlowlyRef) {
-            //循环遍历所有属性是有一定性能负担
-            for (let property in custom) {
-                //跳过setter getter
-                let descriptor = Object.getOwnPropertyDescriptor(custom, property)
-                if (!descriptor) {
-                    continue
-                }
-                let value = custom[property]
-                if (Array.isArray(value)) {
-                    this._checkArray(value, delta)
-                } else if (value instanceof Map) {
-                    this._checkMap(value, delta)
-                } else if (this._checkProperty(value, delta)) {
-                    continue
-                }
-            }
-        }
-    }
-
-    private _autoRefComponentAsset(component: cc.Component, delta: number = 1) {
-        if (component instanceof cc.Sprite) {  //精灵
-            let sprite = component
-            if (sprite) {
-                if (sprite.spriteFrame) {
-                    this._autoRef(sprite.spriteFrame, delta)
-                }
-                this._autoRefRenderComponentAsset(sprite, delta)
-            }
-        } else if (component instanceof cc.Button) {//按钮
-            let button = component
-            if (button.normalSprite) {
-                this._autoRef(button.normalSprite, delta)
-            }
-            if (button.pressedSprite) {
-                this._autoRef(button.pressedSprite, delta)
-            }
-            if (button.hoverSprite) {
-                this._autoRef(button.hoverSprite, delta)
-            }
-            if (button.disabledSprite) {
-                this._autoRef(button.disabledSprite, delta)
-            }
-        } else if (component instanceof cc.Label) {
-            if (component.font)
-                this._autoRefFontAsset(component.font, delta)
-            this._autoRefRenderComponentAsset(component, delta)
-        } else if (component instanceof cc.RichText) {
-            let richText = component
-            if (richText) {
-                if (richText.font)
-                    this._autoRefAnyAsset(richText.font, delta)
-                if (richText.imageAtlas) {
-                    this._autoRefAtlasAsset(richText.imageAtlas, delta)
-                }
-            }
-        } else if (component instanceof cc.ParticleSystem) {
-            if (component.file) {
-                this._autoRef(component.file, delta)
-            }
-            if (component.spriteFrame) {
-                this._autoRef(component.spriteFrame, delta)
-            }
-        } else if (component instanceof cc.PageViewIndicator) {
-            if (component.spriteFrame) {
-                this._autoRef(component.spriteFrame, delta)
-            }
-            // //新版本已经将输入框背景解耦出来成一个独立节点了 如果是旧版本或者cc.EditBox的引用出现问题则放开此注释
-            // } else if (component instanceof cc.EditBox) {
-            //     let editBox = component
-            //     if (editBox.backgroundImage) {
-            //         this._autoRefAsset(editBox.backgroundImage, delta)
-            //     }
-        } else if (component instanceof cc.Mask) {
-            if (component.spriteFrame) { this._autoRef(component.spriteFrame, delta) }
-        } else if (component instanceof cc.Animation) {
-            this._autoRefAnimationComponentAsset(component, delta)
-        } else if (window["sp"] && component instanceof sp.Skeleton) { //可能会被模块剔除
-            this._autoRef(component.skeletonData, delta)
-            this._autoRefRenderComponentAsset(component, delta)
-        } else if (window["dragonBones"] && component instanceof dragonBones.ArmatureDisplay) { //可能会被模块剔除
-            this._autoRef(component.dragonAsset, delta)
-            this._autoRef(component.dragonAtlasAsset, delta)
-        } else {
-            //自定义脚本部分
-            this._autoCustomComponentAsset(component, delta)
-        }
-
-        // //所有组件全部暴力轮询(最初版本)
-        // for (let property in component) {
-        //     //跳过setter getter
-        //     let descriptor = Object.getOwnPropertyDescriptor(component, property)
-        //     if (!descriptor) {
-        //         continue
-        //     }
-        //     let value = component[property]
-        //     if (Array.isArray(value)) {
-        //         this._checkArray(value, delta)
-        //     } else if (value instanceof Map) {
-        //         this._checkMap(value, delta)
-        //     } else if (this._checkProperty(value, delta)) {
-        //         continue
-        //     }
-        // }
-    }
-
-    private _checkProperty(value: any, delta: number) {
-        if (value instanceof cc.Asset) {
-            if (value instanceof cc.Texture2D) return false
-            let asset: cc.Asset = value
-            this._autoRefAnyAsset(asset, delta)
-            return true
-        }
-        return false
-    }
-
-    private _checkArray(arrayList: any[], delta: number) {
-        for (let i = 0; i < arrayList.length; i++) {
-            let data = arrayList[i]
-            if (data instanceof cc.Asset) {
-                if (data instanceof cc.Texture2D) continue
-                let asset: cc.Asset = data
-                this._autoRefAnyAsset(asset, delta)
-            }
-        }
-    }
-
-    private _checkMap(map: Map<any, any>, delta: number) {
-        map.forEach((value, key) => {
-            if (value instanceof cc.Asset && !(value instanceof cc.Texture2D)) {
-                this._autoRefAnyAsset(value, delta)
-            }
-            if (key instanceof cc.Asset && !(key instanceof cc.Texture2D)) {
-                this._autoRefAnyAsset(key, delta)
-            }
-        })
     }
 
     /**
      * 加载bundle 若已缓存则直接同步执行回调
-     * @param bundleName 
-     * @param onLoad 
+     * @param bundleName
+     * @param onLoad
      */
     public loadBundle(bundleName: string, onLoad) {
         let cacheBundle = cc.assetManager.bundles.get(bundleName)
@@ -466,9 +359,9 @@ export default class Resource extends cc.Component {
         })
     }
 
-    /** 
-     * 替换SpriteFrame 
-     * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口 
+    /**
+     * 替换SpriteFrame
+     * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口
      *      错误示例: sprite.spriteFrame = newSpriteFrame 或者 sprite.spriteFrame = null
      */
     public setSpriteFrame(image: cc.Sprite | cc.Mask, newSpriteFrame: cc.SpriteFrame) {
@@ -523,9 +416,9 @@ export default class Resource extends cc.Component {
         button.disabledSprite = newDisableSpriteFrame
     }
 
-    /** 
+    /**
      * 替换字体
-     * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口 
+     * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口
      *      错误示例: label.font = newFont 或者 label.font = null
      */
     public setFont(label: cc.Label | cc.RichText, newFont: cc.Font) {
@@ -562,9 +455,20 @@ export default class Resource extends cc.Component {
         dragonBones.dragonAtlasAsset = newDragonBonesAltas
     }
 
-    /** 
+    public setSpine(skeleton: sp.Skeleton, newSkeletonData: sp.SkeletonData) {
+        if (!skeleton) return
+        let oldSkeletonData = skeleton.skeletonData
+        if (oldSkeletonData)
+            this.decRef(oldSkeletonData)
+        if (newSkeletonData)
+            this.addRef(newSkeletonData)
+
+        skeleton.skeletonData = newSkeletonData
+    }
+
+    /**
     * 替换材质
-    * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口 
+    * 为了保证资源被正确引用计数，在替换时请使用此接口而不是直接使用引擎接口
     *      错误示例: sprite.setMaterial(0, newMaterial)
     */
     public setMaterial(render: cc.RenderComponent, index: number, newMaterial: cc.Material) {
@@ -641,9 +545,7 @@ export default class Resource extends cc.Component {
         let bundleOfScene = cc.assetManager.bundles.find(function (bundle) {
             return bundle.getSceneInfo(sceneName);
         });
-        cc.assetManager.loadAny({ 'scene': sceneName }, { preset: "scene", bundle: bundleOfScene.name }, (finished, total, item) => {
-            cc.log(item)
-        }, (err, sceneAsset) => {
+        cc.assetManager.loadAny({ 'scene': sceneName }, { preset: "scene", bundle: bundleOfScene.name }, (err, sceneAsset) => {
             if (err) {
                 cc.warn(err)
                 //@ts-expect-error
@@ -678,6 +580,7 @@ export default class Resource extends cc.Component {
                         }
                     }
                 }
+
                 bundle.load(assetName, type, (err, asset: cc.Asset) => {
                     if (err) {
                         cc.warn(err)
@@ -685,6 +588,36 @@ export default class Resource extends cc.Component {
                         callback && callback(err)
                     } else {
                         callback && callback(null, asset)
+                    }
+                });
+            } else {
+                cc.warn(err)
+                callback && callback(err)
+            }
+        })
+    }
+
+    public preloadAsset(bundleName: string, assetPath: string, type: typeof cc.Asset, callback?: (err?: string) => void) {
+        this.loadBundle(bundleName, (err: string, bundle: cc.AssetManager.Bundle) => {
+            if (!err) {
+                let info = bundle.getInfoWithPath(assetPath, type)
+                if (info) {
+                    let uuid = info.uuid //cc.assetManager.assets里面存储的key
+                    if (uuid) {
+                        let cachedAsset = cc.assetManager.assets.get(uuid)
+                        if (cachedAsset && cc.isValid(cachedAsset)) {
+                            callback && callback(null)
+                            return
+                        }
+                    }
+                }
+                bundle.preload(assetPath, type, (err) => {
+                    if (err) {
+                        cc.warn(err)
+                        //@ts-expect-error
+                        callback && callback(err)
+                    } else {
+                        callback && callback(null)
                     }
                 });
             } else {
