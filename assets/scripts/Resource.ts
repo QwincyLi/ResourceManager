@@ -13,7 +13,7 @@ export default class ResourceComponent extends cc.Component {
     @property({ tooltip: "资源释放延迟间隔,引用计数归0后多久释放资源", type: cc.Float, min: 0.0 })
     public releaseDelay: number = 5.0
 
-    _waitDelete: Map<string, number> = new Map()
+    private _waitDelete: Map<string, number> = new Map()
 
     onLoad() {
         //循环进行资源检测
@@ -455,6 +455,9 @@ export default class ResourceComponent extends cc.Component {
         dragonBones.dragonAtlasAsset = newDragonBonesAltas
     }
 
+    /**
+     * 替换spine资源,为了保证资源被正确计数,请使用此接口进行替换
+     */
     public setSpine(skeleton: sp.Skeleton, newSkeletonData: sp.SkeletonData) {
         if (!skeleton) return
         let oldSkeletonData = skeleton.skeletonData

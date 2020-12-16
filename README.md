@@ -1,7 +1,7 @@
 ## asset(resource) auto release demo for cocos creator
 ### cocos creator version : 2.4.3+
 ---
-一个cocos creator资源自动管理方案和测试demo。将引擎的[资源的静态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E9%9D%99%E6%80%81%E5%BC%95%E7%94%A8)和[资源的动态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E5%8A%A8%E6%80%81%E5%BC%95%E7%94%A8)的资源管理统一,通过引用计数实现资源的自动释放。
+一个cocos creator asset bundle下的资源自动管理方案和测试demo。将引擎的[资源的静态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E9%9D%99%E6%80%81%E5%BC%95%E7%94%A8)和[资源的动态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E5%8A%A8%E6%80%81%E5%BC%95%E7%94%A8)的资源管理统一,通过引用计数实现资源的自动释放。
 
 ---
 ### Resource Demo: https://github.com/QinSheng-Li/ResourceDemo
@@ -12,11 +12,12 @@
 - @email : 1053128593@qq.com
 ---  
 ### FAQ:
-- 1.如何使用: 将Resource、SlowlyRef两个文件引入项目(需要挂载资源的自定义脚本需要继承SlowlyRef组件,示例：TestSlolyComponent)
-- 2.预加载: 直接使用引擎接口即可
-- 3.资源常驻: 在加载完成得回调中调用本模块的addRef接口(非引擎自带的资源addRef)
+- 1.如何使用: 将Resource引入项目(保证其在资源加载前初始化)
+- 2.预加载: 直接使用引擎接口或者preloadAsset
+- 3.资源常驻: 在加载完成得回调中调用本模块的addRef接口(非引擎自带的 cc.Asset.prototyp.addRef)
 - 4.资源加载接口与引擎接口的区别: 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步)
 - 5.场景的资源自动释放是否需要勾选: 勾选(引擎场景资源释放也是通过引用计数减少的方式,所以不再重复实现,如果需要场景切换对某些资源不释放,参考第三点:资源常驻)
+- 6.资源没有使用后为啥没有立即被释放: 为了避免某些场景下资源被频繁的卸载释放,我们会延迟一段时间定期释放,这个间隔可以通过```releaseDelay : number```参数进行控制 
 ### API:
 #### 1. 资源引用计数
 ``` typescript
@@ -37,7 +38,7 @@ decRef(asset : cc.Asset, delta : number = 1)
 instantiateNode(prefabOrNode: cc.Prefab | cc.Node): cc.Node
 /** 
  * 实例化多个对象
- * (自动引用计数时会遍历所有组件,为了减少消耗,需要实例化多个时建议使用此接口) 
+ * (自动引用计数时会进行遍历,为了减少消耗,需要实例化多个时建议使用此接口) 
  */
 instantiateNodeMultip(prefabOrNode: cc.Prefab | cc.Node, count: number = 1): cc.Node[]
 /**
@@ -76,6 +77,10 @@ setButtonSpriteFrame(button: cc.Button, newNormalSpriteFrame: cc.SpriteFrame, ne
  * 替换龙骨资源
  */
 setDragonBones(dragonBones: dragonBones.ArmatureDisplay, newDragonBonesAsset: dragonBones.DragonBonesAsset, newDragonBonesAltas: dragonBones.DragonBonesAtlasAsset)
+/**
+ * 替换spine资源,为了保证资源被正确计数,请使用此接口进行替换
+ */
+public setSpine(skeleton: sp.Skeleton, newSkeletonData: sp.SkeletonData)`
 ```
 #### 2. 资源加载(与引擎接口的区别是: 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步,如果不需要可以不使用
 ``` typescript
