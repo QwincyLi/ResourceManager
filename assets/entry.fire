@@ -3445,8 +3445,8 @@
       "__id__": 12
     },
     "_enabled": true,
-    "autoRef": true,
-    "releaseDelay": 0,
+    "autoRelease": true,
+    "releaseDelay": 5,
     "_id": "b2fCt5zzFL35A/f6gtf2N0"
   },
   {

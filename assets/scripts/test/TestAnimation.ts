@@ -36,7 +36,7 @@ export default class TestAnimation extends Test {
 
     onTryPlayAnimation() {
         const Resource = this.resource
-        if (this.animationPrefab && this.animationPrefab) {
+        if (this.animationPrefab && this.animationClip) {
             let node = Resource.instantiateNode(this.animationPrefab)
             this.testNode.addChild(node)
             let animation = node.getComponent(cc.Animation)

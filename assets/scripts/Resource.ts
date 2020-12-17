@@ -3,12 +3,24 @@ const { ccclass, property, menu } = cc._decorator;
 const dependUtil = cc.assetManager.dependUtil
 const assets = cc.assetManager.assets
 
+enum DynamicState {
+    STATIC = undefined,
+    UNUSE = 0,
+    USE = 1, //大于这个值都是USE
+}
+
+interface DynamicAsset extends cc.Asset {
+    _ref: number
+    _uuid: string
+    _dynamic: DynamicState
+}
+
 @ccclass
 @menu("GameEntry/Builtins/ResourceComponent")
-export default class ResourceComponent extends cc.Component {
+export default class Resource extends cc.Component {
 
-    @property({ tooltip: "是否启动自动引用计数管理, 游戏运行时不可以再修改" })
-    public autoRef: boolean = true
+    @property({ tooltip: "是否启动自动释放管理, 游戏运行时不可以再修改" })
+    public autoRelease: boolean = true
 
     @property({ tooltip: "资源释放延迟间隔,引用计数归0后多久释放资源", type: cc.Float, min: 0.0 })
     public releaseDelay: number = 5.0
@@ -17,7 +29,7 @@ export default class ResourceComponent extends cc.Component {
 
     onLoad() {
         //循环进行资源检测
-        if (this.autoRef) {
+        if (this.autoRelease) {
             //引擎内置资源常驻
             assets.forEach((asset, uuid) => { asset.addRef() })
 
@@ -43,23 +55,22 @@ export default class ResourceComponent extends cc.Component {
     }
 
     visitAsset(asset: cc.Asset, deps: string[]) {
-        // Skip assets generated programmatically or by user (e.g. label texture)
-        //@ts-expect-error
-        if (!asset._uuid) {
-            return;
-        }
+        let dynamicAsset = asset as DynamicAsset
+        if (!dynamicAsset._uuid) return
+        if (dynamicAsset._dynamic != DynamicState.STATIC && dynamicAsset._dynamic != DynamicState.UNUSE) {
+            //@ts-expect-error
+            if (!deps.includes(asset._uuid)) {
+                //@ts-expect-error
+                deps.push(asset._uuid)
 
-        //@ts-expect-error
-        if (!deps.includes(asset._uuid)) {
-            //@ts-expect-error
-            let subDeps = dependUtil.getDepsRecursively(asset._uuid)
-            //@ts-expect-error
-            deps.push(asset._uuid)
-            for (let i = 0; i < subDeps.length; i++) {
-                let subUuid = subDeps[i]
-                if (!deps.includes(subUuid)) {
-                    deps.push(subDeps[i])
-                }
+                // //@ts-expect-error
+                // let subDeps = dependUtil.getDepsRecursively(asset._uuid)
+                // for (let i = 0; i < subDeps.length; i++) {
+                //     let subUuid = subDeps[i]
+                //     if (!deps.includes(subUuid)) {
+                //         deps.push(subDeps[i])
+                //     }
+                // }
             }
         }
     }
@@ -112,24 +123,28 @@ export default class ResourceComponent extends cc.Component {
         this._waitDelete.set(uuid, deleteTimeStamp)
     }
 
-    addNodeDependAssetsRef(node: cc.Node, delta: number = 1) {
-        let deps = [];
-        this.visitNode(node, deps);
-        for (let i = 0, l = deps.length; i < l; i++) {
-            let dependAsset = assets.get(deps[i]);
-            if (dependAsset) {
-                this.addRef(dependAsset, delta)
-            }
-        }
-    }
+    // addNodeDependAssetsRef(node: cc.Node, delta: number = 1) {
+    //     let deps = [];
+    //     this.visitNode(node, deps);
+    //     for (let i = 0, l = deps.length; i < l; i++) {
+    //         let dependAsset = assets.get(deps[i]);
+    //         if (dependAsset) {
+    //             this._addRef(dependAsset, delta)
+    //         }
+    //     }
+    // }
 
+    /**
+     * 将节点中动态加载的资源引用计数减少
+     * @param node 
+     * @param delta 
+     */
     decNodeDependAssetsRef(node: cc.Node, delta: number = 1) {
         let deps = []
         this.visitNode(node, deps)
         for (let i = 0, l = deps.length; i < l; i++) {
             var dependAsset = assets.get(deps[i]);
             if (dependAsset) {
-                //这里已经遍历获取到了间接依赖的资源了 所以不需要再调用decRef接口而是直接减少
                 //@ts-expect-error
                 dependAsset._ref -= delta
                 //@ts-expect-error
@@ -147,68 +162,22 @@ export default class ResourceComponent extends cc.Component {
      */
     public instantiateNode(prefabOrNode: cc.Prefab | cc.Node): cc.Node {
 
-        // let performance1 = performance.now()
         let node = cc.instantiate(prefabOrNode as cc.Node)
-        // let performance2 = performance.now()
-        if (this.autoRef) {
+        if (this.autoRelease) {
             if (prefabOrNode instanceof cc.Prefab) {
-                //预制资源添加引用(如果单次创建 实例化后不需要保留预制资源的引用的话 则需要调用decRef 将预制手动释放掉)
-                // let performance3 = performance.now()
-                this.addRef(prefabOrNode) //在引擎内部：资源减少引用计数的时候会对所有它的直接依赖减少引用计数
-                // let performance4 = performance.now()
-
-                // let engineDuration = performance2 - performance1
-                // let refDuration = performance4 - performance3
-                // cc.log(`${prefabOrNode.name} 引擎实例化耗时 ${engineDuration}`)
-                // cc.log(`${prefabOrNode.name} 引用计数实例化耗时 ${refDuration}`)
-            } else {
-                //实例节点引用计数添加
-                //cc.warn("TODO : " + prefabOrNode.name + " addRefRecursively...")
-                this.addNodeDependAssetsRef(prefabOrNode)
-            }
-
-            //标注节点预制来源 
-            // @ts-expect-error
-            if (prefabOrNode._uuid) {
+                prefabOrNode.addRef()
                 //hack 标记资源的预制来源
                 //@ts-expect-error
                 node._uuid = prefabOrNode._uuid
+
+                //动态加载的资源 引用计数
+                let dynamicAsset = prefabOrNode as any as DynamicAsset
+                if (dynamicAsset._dynamic != DynamicState.STATIC) {
+                    dynamicAsset._dynamic += 1
+                }
             }
         }
         return node
-    }
-
-    /**
-     * 实例化多个对象(自动引用计数时会遍历所有组件,为了减少消耗,需要实例化多个时建议使用此接口)
-     * @param prefabOrNode
-     * @param count
-     */
-    public instantiateNodeMultip(prefabOrNode: cc.Prefab | cc.Node, count: number = 1): cc.Node[] {
-
-        let nodeList = []
-        for (let i = 0; i < count; i++) {
-            let node = cc.instantiate(prefabOrNode as cc.Node)
-            //标注节点预制来源 
-            // @ts-expect-error
-            if (prefabOrNode._uuid) {
-                //hack 标记资源的预制来源
-                //@ts-expect-error
-                node._uuid = prefabOrNode._uuid
-            }
-            nodeList.push(node)
-        }
-
-        if (this.autoRef) {
-            if (prefabOrNode instanceof cc.Prefab) {
-                //预制资源添加引用(如果单次创建 实例化后不需要保留预制资源的引用的话 则需要调用decRef 将预制手动释放掉
-                this.addRef(prefabOrNode, count)
-            } else {
-                //实例节点引用计数添加
-                //cc.warn("TODO : " + prefabOrNode.name + " addRefRecursively...")
-                this.addNodeDependAssetsRef(prefabOrNode, count)
-            }
-        }
-        return nodeList
     }
 
     /**
@@ -217,19 +186,15 @@ export default class ResourceComponent extends cc.Component {
      */
     public destroyNode(node: cc.Node) {
         if (node && cc.isValid(node)) {
-            if (this.autoRef) {
+            if (this.autoRelease) {
                 this.decNodeDependAssetsRef(node)
                 //hack 根据标记的预}制来源 减少预制的引用
                 //@ts-expect-error
                 if (node._uuid) {
-                    //预制减少引用(这里不递归减少依赖得资源,因为预制里得资源属性可能被修改了)
                     //@ts-expect-error
                     let prefab = cc.assetManager.assets.get(node._uuid) as cc.Prefab
                     if (prefab) {
-                        //@ts-expect-error
-                        prefab._ref -= 1
-                        //@ts-expect-error
-                        this.tryRelease(prefab._uuid)
+                        this.decRef(prefab)
                     }
                 }
             }
@@ -246,77 +211,38 @@ export default class ResourceComponent extends cc.Component {
         }
     }
 
-    /**
-     * 给资源增加引用计数,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的addRef方法
-     * @param asset
-     * @param delta 增加的引用计数量,默认为1
-     */
-    public addRef(asset: cc.Asset, delta: number = 1) {
-        if (this.autoRef && asset) {
-
+    private _addRef(asset: cc.Asset, delta: number = 1) {
+        if (this.autoRelease && asset) {
             if (!cc.isValid(asset, true)) {
                 cc.warn(`Resource : asset addRef ${asset.name} not valid, addRef failuer`)
                 return
             }
-            //cc.log("addRef : " + asset.name)
-            let depUuid = dependUtil.getDepsRecursively((asset as any)._uuid)
-            for (let i = 0; i < depUuid.length; i++) {
-                let depAsset = assets.get(depUuid[i])
-                if (depAsset) {
-                    if (depAsset instanceof cc.MaterialVariant) {
-                        //@ts-expect-error
-                        depAsset = depAsset.material
-                    }
-                    //@ts-expect-error
-                    depAsset._ref += delta
-                    //cc.log(`add Dependent Asset Ref : ${depAsset.name} ${cc.js.getClassName(depAsset)} , refCount : ${depAsset.refCount}`)
-                } else {
-                    cc.warn(`Resource : asset addRef ${asset.name} ${cc.js.getClassName(asset)} not fount depend asset ${depUuid[i]}`)
-                }
-            }
+
             if (asset instanceof cc.MaterialVariant) {
                 //@ts-expect-error
                 asset = asset.material
             }
-            //@ts-expect-error
-            asset._ref += delta
-            // cc.log("addRef : " + asset.name + " " + cc.js.getClassName(asset) + " , refCount : " + asset.refCount)
-            //cc.log("--------------------------------------------------------")
+            let dynamicAsset = asset as DynamicAsset
+            if (dynamicAsset._dynamic != DynamicState.STATIC) {
+                dynamicAsset._dynamic += delta
+            }
+            dynamicAsset._ref += delta
         }
     }
 
-    /**
-     * 给资源减少引用计数,为了保证资源被正确引用计数，请使用此接口代替cc.Asset中的decRef方法
-     * @param asset
-     * @param delta 减少的引用计数量,默认为1
-     */
-    public decRef(asset: cc.Asset, delta: number = 1) {
-        if (this.autoRef && asset) {
-
-            let depUuid = dependUtil.getDepsRecursively((asset as any)._uuid)
-            for (let i = 0; i < depUuid.length; i++) {
-                let depAsset = assets.get(depUuid[i])
-                if (depAsset) {
-                    //@ts-expect-error
-                    depAsset._ref -= delta
-                    if (depAsset.refCount <= 0) {
-                        //@ts-expect-error
-                        this.tryRelease(depAsset._uuid)
-                    }
-                } else {
-                    cc.warn(`asset decRef : ${asset.name} ${cc.js.getClassName(asset)} not fount depend asset ${depUuid[i]}`)
-                }
+    private _decRef(asset: cc.Asset) {
+        if (this.autoRelease && asset) {
+            if (asset instanceof cc.MaterialVariant) {
+                //@ts-expect-error
+                asset = asset.material
             }
-
-            //@ts-expect-error
-            asset._ref -= delta
-            cc.log("decRef : " + asset.name + " " + cc.js.getClassName(asset) + " , refCount : " + asset.refCount)
-
-            //引用计数不为0 可能是循环引用也需要做删除检测
-            //if (asset.refCount <= 0) {
-            //@ts-expect-error
-            this.tryRelease(asset._uuid)
-            //}
+            let dynamicAsset = asset as DynamicAsset
+            if (dynamicAsset._dynamic != DynamicState.STATIC && dynamicAsset._dynamic != DynamicState.UNUSE) {
+                dynamicAsset._dynamic -= 1
+                dynamicAsset._ref -= 1
+                //引用计数不为0 可能是循环引用也需要做删除检测
+                this.tryRelease(dynamicAsset._uuid)
+            }
         }
     }
 
@@ -369,10 +295,10 @@ export default class ResourceComponent extends cc.Component {
         let oldSpriteFrame = image.spriteFrame
         if (oldSpriteFrame == newSpriteFrame) return
         if (oldSpriteFrame) {
-            this.decRef(oldSpriteFrame)
+            this._decRef(oldSpriteFrame)
         }
         if (newSpriteFrame) {
-            this.addRef(newSpriteFrame)
+            this._addRef(newSpriteFrame)
         }
 
         try {
@@ -393,22 +319,22 @@ export default class ResourceComponent extends cc.Component {
         let oldDisableSpriteFrame = button.disabledSprite
 
         if (oldNormalSpriteFrame)
-            this.decRef(oldNormalSpriteFrame)
+            this._decRef(oldNormalSpriteFrame)
         if (oldPressedSpriteFrame)
-            this.decRef(oldPressedSpriteFrame)
+            this._decRef(oldPressedSpriteFrame)
         if (oldHoverSpriteFrame)
-            this.decRef(oldHoverSpriteFrame)
+            this._decRef(oldHoverSpriteFrame)
         if (oldDisableSpriteFrame)
-            this.decRef(oldDisableSpriteFrame)
+            this._decRef(oldDisableSpriteFrame)
 
         if (newNormalSpriteFrame)
-            this.addRef(newNormalSpriteFrame)
+            this._addRef(newNormalSpriteFrame)
         if (newPressedSpriteFrame)
-            this.addRef(newPressedSpriteFrame)
+            this._addRef(newPressedSpriteFrame)
         if (newHoverSpriteFrame)
-            this.addRef(newHoverSpriteFrame)
+            this._addRef(newHoverSpriteFrame)
         if (newDisableSpriteFrame)
-            this.addRef(newDisableSpriteFrame)
+            this._addRef(newDisableSpriteFrame)
 
         button.normalSprite = newNormalSpriteFrame
         button.pressedSprite = newPressedSpriteFrame
@@ -425,11 +351,11 @@ export default class ResourceComponent extends cc.Component {
         if (!label) return
         let oldFont = label.font
         if (oldFont == newFont) return
-        if (this.autoRef) {
+        if (this.autoRelease) {
             if (oldFont)
-                this.decRef(oldFont)
+                this._decRef(oldFont)
             if (newFont)
-                this.addRef(newFont)
+                this._addRef(newFont)
         }
         label.font = newFont
     }
@@ -442,14 +368,14 @@ export default class ResourceComponent extends cc.Component {
         let oldDragonBonesAsset = dragonBones.dragonAsset
         let oldDragonBonesAtlas = dragonBones.dragonAtlasAsset
         if (oldDragonBonesAsset)
-            this.decRef(oldDragonBonesAsset)
+            this._decRef(oldDragonBonesAsset)
         if (oldDragonBonesAtlas)
-            this.decRef(oldDragonBonesAtlas)
+            this._decRef(oldDragonBonesAtlas)
 
         if (newDragonBonesAltas)
-            this.addRef(newDragonBonesAltas)
+            this._addRef(newDragonBonesAltas)
         if (newDragonBonesAsset)
-            this.addRef(newDragonBonesAsset)
+            this._addRef(newDragonBonesAsset)
 
         dragonBones.dragonAsset = newDragonBonesAsset
         dragonBones.dragonAtlasAsset = newDragonBonesAltas
@@ -462,9 +388,9 @@ export default class ResourceComponent extends cc.Component {
         if (!skeleton) return
         let oldSkeletonData = skeleton.skeletonData
         if (oldSkeletonData)
-            this.decRef(oldSkeletonData)
+            this._decRef(oldSkeletonData)
         if (newSkeletonData)
-            this.addRef(newSkeletonData)
+            this._addRef(newSkeletonData)
 
         skeleton.skeletonData = newSkeletonData
     }
@@ -479,12 +405,12 @@ export default class ResourceComponent extends cc.Component {
         if (index < 0) return
         if (index >= render.getMaterials().length) return
         let oldMaterial = render.getMaterial(index)
-        //if (oldMaterial == newMaterial) return //getMaterial获取的是材质变体 肯定无法相等 在引用管理内部会对此进行处理(_autoRefAsset)
+        //if (oldMaterial == newMaterial) return //getMaterial获取的是材质变体 肯定无法相等 在引用管理内部会对此进行处理(_autoReleaseAsset)
         if (oldMaterial) {
-            this.decRef(oldMaterial)
+            this._decRef(oldMaterial)
         }
         if (newMaterial)
-            this.addRef(newMaterial)
+            this._addRef(newMaterial)
         render.setMaterial(index, newMaterial)
     }
 
@@ -548,6 +474,10 @@ export default class ResourceComponent extends cc.Component {
         let bundleOfScene = cc.assetManager.bundles.find(function (bundle) {
             return bundle.getSceneInfo(sceneName);
         });
+        if (!bundleOfScene) {
+            cc.warn("Resource : loadScene failed, not found scene info from bundles")
+            return
+        }
         cc.assetManager.loadAny({ 'scene': sceneName }, { preset: "scene", bundle: bundleOfScene.name }, (err, sceneAsset) => {
             if (err) {
                 cc.warn(err)
@@ -555,6 +485,11 @@ export default class ResourceComponent extends cc.Component {
                 callback && callback(err, null)
                 return
             }
+            // let dynamicAsset = sceneAsset as DynamicAsset
+            // if (dynamicAsset._dynamic == DynamicState.STATIC) {
+            //     dynamicAsset._dynamic = DynamicState.UNUSE
+            // }
+            // this.addRef(sceneAsset)
             cc.director.runScene(sceneAsset, null, (err, newScene: cc.Scene) => {
                 callback && callback(err, newScene)
             })
@@ -590,6 +525,13 @@ export default class ResourceComponent extends cc.Component {
                         //@ts-expect-error
                         callback && callback(err)
                     } else {
+                        if (this.autoRelease) {
+                            let dynamicAsset = asset as DynamicAsset
+                            if (dynamicAsset._dynamic == DynamicState.STATIC) {
+                                dynamicAsset._dynamic = DynamicState.UNUSE
+                            }
+                            this.tryRelease(dynamicAsset._uuid) //资源加载后不使用也会被自动释放,防止资源一直占据内存,如果需要常驻 请调用asset.addRef 添加引用计数
+                        }
                         callback && callback(null, asset)
                     }
                 });
