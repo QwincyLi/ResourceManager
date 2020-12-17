@@ -194,7 +194,7 @@ export default class Resource extends cc.Component {
                     //@ts-expect-error
                     let prefab = cc.assetManager.assets.get(node._uuid) as cc.Prefab
                     if (prefab) {
-                        this.decRef(prefab)
+                        this._decRef(prefab)
                     }
                 }
             }
