@@ -145,11 +145,7 @@ export default class Resource extends cc.Component {
         for (let i = 0, l = deps.length; i < l; i++) {
             var dependAsset = assets.get(deps[i]);
             if (dependAsset) {
-                //@ts-expect-error
-                dependAsset._ref -= delta
-                //@ts-expect-error
-                this.tryRelease(dependAsset._uuid)
-                //this.decRef(dependAsset, delta)
+                this._decRef(dependAsset)
             } else {
                 cc.warn(`Resource : node dec asset , ${node.name} not fount depend asset ${deps[i]}`)
             }
