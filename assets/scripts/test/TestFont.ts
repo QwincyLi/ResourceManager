@@ -1,58 +1,58 @@
-import Test from "./Test";
 
-const { ccclass, property } = cc._decorator;
 
-@ccclass
-export default class TestFont extends Test {
+// const { ccclass, property } = cc._decorator;
 
-    loadString: string = "加载字体"
-    releaseString: string = "释放字体"
-    testLabel: cc.Label = null
+// @ccclass
+// export default class TestFont extends Test {
 
-    start() {
-        if (!this.testNode.getComponent(cc.Label))
-            this.testLabel = this.testNode.addComponent(cc.Label)
-    }
+//     loadString: string = "加载字体"
+//     releaseString: string = "释放字体"
+//     testLabel: cc.Label = null
 
-    onTest() {
-        super.onTest()
-        const Resource = this.resource
-        if (this.testFlag) {
-            cc.log("添加引用")
-            Resource.loadPrefab("bundles", "prefabs/Font", (err, prefab) => {
-                if (!err) {
-                    let node = Resource.instantiateNode(prefab)
-                    this.testNode.addChild(node)
+//     // start() {
+//     //     if (!this.testNode.getComponent(cc.Label))
+//     //         this.testLabel = this.testNode.addComponent(cc.Label)
+//     // }
 
-                    let clickEventHandler = new cc.Component.EventHandler();
-                    clickEventHandler.target = this.node;
-                    clickEventHandler.component = "TestFont";
-                    clickEventHandler.handler = "onChangeFont";
-                    clickEventHandler.customEventData = null;
+//     // onTest() {
+//     //     super.onTest()
+//     //     const Resource = this.resource
+//     //     if (this.testFlag) {
+//     //         cc.log("添加引用")
+//     //         Resource.loadPrefab("bundles", "prefabs/Font", (err, prefab) => {
+//     //             if (!err) {
+//     //                 let node = Resource.instantiateNode(prefab)
+//     //                 this.testNode.addChild(node)
 
-                    let button = node.getComponentInChildren(cc.Button)
-                    button.clickEvents.push(clickEventHandler);
-                }
-            })
-            Resource.loadFont("resources", "font/enligsh-chinese", (err, font) => {
-                this.testLabel.string = "一0五3一2八5九3";
-                Resource.setFont(this.testLabel, font)
-            })
-        } else {
-            Resource.destroyAllChildrenNode(this.testNode)
-            this.testLabel.string = ""
-            Resource.setFont(this.testLabel, null)
-            cc.log("释放引用")
-        }
-    }
+//     //                 let clickEventHandler = new cc.Component.EventHandler();
+//     //                 clickEventHandler.target = this.node;
+//     //                 clickEventHandler.component = "TestFont";
+//     //                 clickEventHandler.handler = "onChangeFont";
+//     //                 clickEventHandler.customEventData = null;
 
-    onChangeFont() {
-        const Resource = this.resource
-        let labels = this.testNode.getComponentsInChildren(cc.Label)
-        for (let i = 0; i < labels.length; i++) {
-            let label = labels[i]
-            Resource.setFont(label, null)
-        }
-    }
-}
+//     //                 let button = node.getComponentInChildren(cc.Button)
+//     //                 button.clickEvents.push(clickEventHandler);
+//     //             }
+//     //         })
+//     //         Resource.loadFont("resources", "font/enligsh-chinese", (err, font) => {
+//     //             this.testLabel.string = "一0五3一2八5九3";
+//     //             Resource.setFont(this.testLabel, font)
+//     //         })
+//     //     } else {
+//     //         Resource.destroyAllChildrenNode(this.testNode)
+//     //         this.testLabel.string = ""
+//     //         Resource.setFont(this.testLabel, null)
+//     //         cc.log("释放引用")
+//     //     }
+//     // }
+
+//     // onChangeFont() {
+//     //     const Resource = this.resource
+//     //     let labels = this.testNode.getComponentsInChildren(cc.Label)
+//     //     for (let i = 0; i < labels.length; i++) {
+//     //         let label = labels[i]
+//     //         Resource.setFont(label, null)
+//     //     }
+//     // }
+// }
 

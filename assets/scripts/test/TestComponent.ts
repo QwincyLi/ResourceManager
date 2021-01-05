@@ -1,11 +1,9 @@
-import Resource from "../Resource";
-
 const { ccclass, property } = cc._decorator;
 
 @ccclass
-export default class Test extends cc.Component {
+export default class TestComponent extends cc.Component {
 
-    resource: Resource = null
+    // resource: Resource = null
     testRoot: cc.Node
     testNode: cc.Node
     testFlag: boolean = false
@@ -15,7 +13,7 @@ export default class Test extends cc.Component {
 
     onLoad() {
         let node = cc.find("TestList")
-        this.resource = node.getComponent(Resource)
+        // this.resource = node.getComponent(Resource)
         this.testNode = new cc.Node(this.name)
         this.testRoot = cc.find("CountLabel")
         this.testRoot.addChild(this.testNode)

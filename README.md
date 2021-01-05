@@ -12,13 +12,14 @@
 - @email : 1053128593@qq.com  
 ---
 ### FAQ:
-- 1.如何使用: 将Resource引入项目(节点实例化、销毁 资源加载、替换请使用下文Api内接口)
+- 1.如何使用: 将Resource文件引入项目并将其挂载在常驻节点上(节点实例化、销毁 资源加载、替换请使用下文Api内接口)
 - 2.预加载: 直接使用引擎接口或者preloadAsset
-- 3.资源常驻: 在加载完成得回调中调用本模块的addRef接口(非引擎自带的 cc.Asset.prototyp.addRef)
-- 4.资源加载接口与引擎接口的区别: 对资源的动态引用进行特殊处理 并且 如果已经加载到内存中了则立即执行回调而不是特意延迟模拟异步
+- 3.资源常驻: 直接调用引擎资源接口```cc.Asset.prototype.addRef```)即可
+- 4.资源加载接口与引擎接口的区别: 对资源的动态引用进行特殊处理 并且 如果将syncCallback设为true的话，则已经加载到内存中了资源则立即执行回调而不是使用引擎的延迟模拟异步
 - 5.场景的资源自动释放是否需要勾选: 勾选(引擎场景资源释放也是通过引用计数减少的方式,所以不再重复实现,如果需要场景切换对某些资源不释放,参考第三点:资源常驻)
-- 6.节点销毁后资源为啥没有立即被释放: 为了避免某些场景下资源被频繁的卸载释放,我们会延迟一段时间定期释放,这个间隔可以通过```releaseDelay : number```参数进行控制 
-- 7.场景切换后资源为啥又是立即释放: 为了避免大场景切换是两个场景资源同时存在 长时间的使得内存居高不下(使用的是引擎的资源释放接口会被立即释放掉, 参考第五点)
+- 6.节点销毁后资源为啥没有立即被释放: 为了避免某些场景下资源被频繁的卸载加载,我们会延迟一段时间定期释放,这个间隔可以通过```releaseDelay : number```参数进行控制 
+- 7.调用decRef为什么是立即释放: 这是由引擎策略所决定的,如果希望同第6点,需```asset.decRef(false)//传入false不释放 ``` 后 调用本模块的 ```Resource.tryRelease(asset._uuid)```
+- 8.资源加载完成后为什么被放入待释放队列: 希望用户能有更清晰的资源管理概念(理清什么动态资源需要常驻,什么动态资源在界面或者场景关闭后需要释放,避免资源被加载后却遗忘释放)
 ### API:
 #### 1. 节点实例化及销毁
 ``` typescript
@@ -69,9 +70,9 @@ setDragonBones(dragonBones: dragonBones.ArmatureDisplay, newDragonBonesAsset: dr
 /**
  * 替换spine资源,为了保证资源被正确计数,请使用此接口进行替换
  */
-public setSpine(skeleton: sp.Skeleton, newSkeletonData: sp.SkeletonData)`
+setSpine(skeleton: sp.Skeleton, newSkeletonData: sp.SkeletonData)`
 ```
-#### 3. 资源动态加载(自动释放的情况下 请使用以下接口替代引擎接口)
+#### 3. 资源动态加载(请使用以下接口替代引擎接口, 注: 资源加载完成后会被放入待释放队列)
 ``` typescript
 /**
  * 加载bundle 若已缓存则直接同步执行回调
@@ -96,10 +97,6 @@ loadAudioClip(bundleName: string, audioClipPath: string, callback: (err: string,
 loadAnimationClip(bundleName: string, clipPath: string, callback: (err: string, clip: cc.AnimationClip) => void)
 loadAtlas(bundleName: string, atlasPath: string, callback?: (err?: string, atlas?: cc.SpriteAtlas) => void)
 loadSpine(bundleName: string, spinePath: string, callback?: (err?: string, spine?: sp.SkeletonData) => void)
-/**
- * 加载并运行场景（暂未特殊处理,参考FAQ 第七点)
- */
-loadScene(sceneName: string, callback?: (err: string, scene: cc.Scene) => void)
 ```
 ---
 ### 如果觉得有用的话,也可以支持一波:pray:
