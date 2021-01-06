@@ -18,7 +18,7 @@
 - 4.资源加载接口与引擎接口的区别: 对资源的动态引用进行特殊处理 并且 如果将syncCallback设为true的话，则已经加载到内存中了资源则立即执行回调而不是使用引擎的延迟模拟异步
 - 5.场景的资源自动释放是否需要勾选: 勾选(引擎场景资源释放也是通过引用计数减少的方式,所以不再重复实现,如果需要场景切换对某些资源不释放,参考第三点:资源常驻)
 - 6.节点销毁后资源为啥没有立即被释放: 为了避免某些场景下资源被频繁的卸载加载,我们会延迟一段时间定期释放,这个间隔可以通过```releaseDelay : number```参数进行控制 
-- 7.调用decRef为什么是立即释放: 这是由引擎策略所决定的,如果希望同第6点,需```asset.decRef(false)//传入false不释放 ``` 后 调用本模块的 ```Resource.tryRelease(asset._uuid)```
+- 7.调用decRef为什么被立即释放: 这是由引擎实现所决定的,如果希望同第6点,需调用引擎资源接口```asset.decRef(false)//传入false不释放 ``` 后 调用本模块的 ```Resource.tryRelease(asset._uuid)```
 - 8.资源加载完成后为什么被放入待释放队列: 希望用户能有更清晰的资源管理概念(理清什么动态资源需要常驻,什么动态资源在界面或者场景关闭后需要释放,避免资源被加载后却遗忘释放)
 ### API:
 #### 1. 节点实例化及销毁
@@ -35,7 +35,7 @@ instantiateNode(prefabOrNode: cc.Prefab | cc.Node): cc.Node
 destroyNode(node: cc.Node)
 /**
  * 销毁一个节点的所有子节点
- * 为了保证资源被正确引用计数，请使用此接口代替cc.Node中的destroy方法
+ * 为了保证资源被正确引用计数，请使用此接口代替cc.Node中的destroyAllChildren方法
  */
 destroyAllChildrenNode(node: cc.Node)
 ```

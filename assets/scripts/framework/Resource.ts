@@ -17,8 +17,8 @@ const dependUtil = cc.assetManager.dependUtil
 const assets = cc.assetManager.assets
 
 @ccclass
-@menu("GameEntry/Builtins/ResourceComponent")
-export default class ResourceComponent extends cc.Component {
+@menu("Framework/Resource")
+export default class Resource extends cc.Component {
 
     @property({ tooltip: "是否启动自动释放管理, 游戏运行时不可以再修改" })
     public autoRelease: boolean = true
@@ -211,6 +211,10 @@ export default class ResourceComponent extends cc.Component {
         }
     }
 
+    /**
+     * 销毁一个节点的所有子节点
+     * 为了保证资源被正确引用计数，请使用此接口代替cc.Node中的destroyAllChildren方法
+     */
     public destroyAllChildrenNode(node: cc.Node) {
         if (node) {
             let count = node.childrenCount
