@@ -17,8 +17,7 @@ const dependUtil = cc.assetManager.dependUtil
 const assets = cc.assetManager.assets
 
 @ccclass
-@menu("Framework/Resource")
-export default class Resource extends cc.Component {
+export default class ResourceManager extends cc.Component {
 
     @property({ tooltip: "是否启动自动释放管理, 游戏运行时不可以再修改" })
     public autoRelease: boolean = true
@@ -515,16 +514,15 @@ export default class Resource extends cc.Component {
     public loadAsset(bundleName: string, assetName: string, type: typeof cc.Asset, callback?: (err?: string, asset?: cc.Asset) => void) {
         this.loadBundle(bundleName, (err: string, bundle: cc.AssetManager.Bundle) => {
             if (!err) {
-                if (this.syncCallback) {
-                    let info = bundle.getInfoWithPath(assetName, type)
-                    if (info) {
-                        let uuid = info.uuid //cc.assetManager.assets里面存储的key
-                        if (uuid) {
-                            let cachedAsset = cc.assetManager.assets.get(uuid)
-                            if (cachedAsset && cc.isValid(cachedAsset)) {
-                                callback && callback(null, cachedAsset)
-                                return
-                            }
+                let info = bundle.getInfoWithPath(assetName, type)
+                if (info) {
+                    let uuid = info.uuid //cc.assetManager.assets里面存储的key
+                    if (uuid) {
+                        let cachedAsset = cc.assetManager.assets.get(uuid)
+                        if (cachedAsset && cc.isValid(cachedAsset)) {
+                            this._initDynamicLoadAsset(cachedAsset)
+                            callback && callback(null, cachedAsset)
+                            return
                         }
                     }
                 }
@@ -535,14 +533,7 @@ export default class Resource extends cc.Component {
                         //@ts-expect-error
                         callback && callback(err)
                     } else {
-                        if (this.autoRelease) {
-                            let dynamicAsset = asset as DynamicAsset
-                            if (dynamicAsset._dynamic == DynamicState.STATIC) {
-                                dynamicAsset._dynamic = DynamicState.UNUSE
-                            }
-                            //如果不需要请注释（不建议)
-                            this.tryRelease(dynamicAsset._uuid) //资源加载后不使用也会被自动释放,防止资源一直占据内存,如果需要常驻 请调用asset.addRef 添加引用计数
-                        }
+                        this._initDynamicLoadAsset(asset)
                         callback && callback(null, asset)
                     }
                 });
@@ -551,6 +542,16 @@ export default class Resource extends cc.Component {
                 callback && callback(err)
             }
         })
+    }
+
+    private _initDynamicLoadAsset(asset: cc.Asset) {
+        if (this.autoRelease) {
+            let dynamicAsset = asset as DynamicAsset
+            if (dynamicAsset._dynamic == DynamicState.STATIC) {
+                dynamicAsset._dynamic = DynamicState.UNUSE
+            }
+            this.tryRelease(dynamicAsset._uuid) //资源加载后不使用也会被自动释放,防止资源一直占据内存,如果需要常驻 请调用asset.addRef 添加引用计数
+        }
     }
 
     public preloadPrefab(bundleName: string, prefabPath: string, callback?: (err?: string) => void) {
