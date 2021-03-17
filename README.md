@@ -2,19 +2,22 @@
 ### cocos creator version : 2.4.3
 ---
 一个cocos creator的资源管理方案。将引擎的[资源的静态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E9%9D%99%E6%80%81%E5%BC%95%E7%94%A8)和[资源的动态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E5%8A%A8%E6%80%81%E5%BC%95%E7%94%A8)统一,通过引用计数实现资源的自动释放。
+
+如果你使用过unity的addressables的话，你可以将其理解为一个cocos creator的addressables的近似实现，配合bundle集成配置插件使用效果更佳： [qsbundle](https://github.com/QinSheng-Li/qsbundle)
+
 --- 
 - @author : lqs
 - @license : MIT
 - @email : 1053128593@qq.com  
 ---
 ### FAQ:
-- 1.如何使用: 将Resource文件引入项目并将其挂载在常驻节点或者其子节点上(节点实例化、销毁 资源加载、替换请使用下文Api内接口)
+- 1.如何使用: 将ResourceManager文件引入项目并将其挂载在常驻节点或者其子节点上(节点实例化、销毁 资源加载、替换请使用下文Api内接口)
 - 2.预加载: 直接使用引擎接口或者preloadAsset
 - 3.资源常驻: 直接调用引擎资源接口```cc.Asset.prototype.addRef```)即可
 - 4.资源加载接口与引擎接口的区别: 对资源的动态引用进行标记（建议已加载的资源也使用此接口获取进行标记检查）。并且如果将syncCallback设为true的话，则已经加载到内存中了资源则立即执行回调而不是使用引擎的延迟模拟异步
 - 5.场景的资源自动释放是否需要勾选: 勾选(引擎场景资源自动释放也是通过引用计数减少的方式,所以不再重复实现,如果需要场景切换对某些资源不释放,参考第三点:资源常驻)
 - 6.节点销毁后资源为啥没有立即被释放: 为了避免某些场景下资源被频繁的卸载加载,我们会延迟一段时间定期释放,这个间隔可以通过```releaseDelay : number```参数进行控制，默认值为5s
-- 7.调用decRef为什么被立即释放: 这是由引擎实现所决定的,如果希望同第6点,需调用引擎资源接口```asset.decRef(false)//传入false只减少引用计数,不释放 ``` 后 调用本模块的 ```Resource.tryRelease(asset._uuid)```
+- 7.调用decRef为什么被立即释放: 这是由引擎实现所决定的,如果希望同第6点,需调用引擎资源接口```asset.decRef(false)//传入false只减少引用计数,不释放 ``` 后 调用本模块的 ```resMgr.tryRelease(asset._uuid)```
 - 8.资源加载完成后为什么立即被放入待释放队列: 希望用户能有更清晰的资源管理概念，理清什么动态资源需要常驻,什么动态资源在界面或者场景关闭后需要释放,避免资源被加载后却遗忘释放，如果避免被释放的话参考第3点。
 eg: 如果是同某界面一起的生命周期 你可以在onLoad中动态加载并addRef,然后在onDestroy中decRef
 ### API:
