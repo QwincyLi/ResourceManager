@@ -1,6 +1,8 @@
 ## Resource manager for cocos creator
 ### cocos creator version : 2.4.3
 ---
+TODO: 移除动态属性(避免js引擎创建冗余的隐藏类),使用Map记录标记
+---
 一个cocos creator的资源管理方案。将引擎的[资源的静态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E9%9D%99%E6%80%81%E5%BC%95%E7%94%A8)和[资源的动态引用](https://docs.cocos.com/creator/manual/zh/asset-manager/release-manager.html#%E8%B5%84%E6%BA%90%E7%9A%84%E5%8A%A8%E6%80%81%E5%BC%95%E7%94%A8)统一,通过引用计数实现资源的自动释放。
 
 如果你使用过unity的addressables的话，你可以将其理解为一个cocos creator的addressables的近似实现，配合bundle集成配置插件使用效果更佳： [qsbundle](https://github.com/QinSheng-Li/qsbundle)
